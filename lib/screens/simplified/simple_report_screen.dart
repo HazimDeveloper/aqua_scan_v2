@@ -1,4 +1,4 @@
-// lib/screens/simplified/simple_report_screen.dart - FIXED: Handle Low Confidence Results
+// lib/screens/simplified/simple_report_screen.dart - FIXED: Better Threshold/Low Confidence Error Handling
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -45,12 +45,13 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   double? _confidence;
   String? _originalClass;
   
-  // ENHANCED: Better state tracking
+  // ENHANCED: Better error state management
   bool _waterDetected = false;
   String? _analysisMessage;
   bool _analysisCompleted = false;
   String? _detectionError;
-  bool _isLowConfidence = false; // ADDED: Track low confidence results
+  bool _isLowConfidence = false;
+  bool _canSubmitWithLowConfidence = false; // NEW: Allow submission even with low confidence
   
   late DatabaseService _databaseService;
   late StorageService _storageService;
@@ -59,8 +60,6 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   
   GeoPoint? _location;
   String? _autoAddress;
-  
-  final bool _debugMode = true;
   
   @override
   void initState() {
@@ -72,32 +71,21 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     
     _reporterNameController.text = widget.isAdmin ? 'Admin User' : 'Test User';
     
-    _logDebug('SimpleReportScreen initialized with LOW CONFIDENCE handling');
+    print('📱 SimpleReport initialized with ENHANCED error handling');
     _getCurrentLocation();
-  }
-  
-  void _logDebug(String message) {
-    if (_debugMode) {
-      print('📱 SimpleReport: $message');
-    }
   }
   
   Future<void> _getCurrentLocation() async {
     try {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
       
-      _logDebug('Getting current location...');
       final position = await _locationService.getCurrentLocation();
       
       if (position != null) {
-        _logDebug('Location obtained: ${position.latitude}, ${position.longitude}');
         final address = await _locationService.getAddressFromCoordinates(
           position.latitude,
           position.longitude,
         );
-        _logDebug('Address resolved: $address');
         
         setState(() {
           _location = _locationService.positionToGeoPoint(position);
@@ -106,15 +94,11 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           _isLoading = false;
         });
       } else {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      _logDebug('Error getting location: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      print('Error getting location: $e');
+      setState(() => _isLoading = false);
     }
   }
   
@@ -126,56 +110,37 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     
     showModalBottomSheet(
       context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => Container(
         padding: EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
             SizedBox(height: 20),
-            Text(
-              'Add Photo',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text('Add Photo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             SizedBox(height: 20),
             Row(
               children: [
-                Expanded(
-                  child: _buildImageSourceOption(
-                    icon: Icons.camera_alt,
-                    title: 'Camera',
-                    subtitle: 'Take new photo',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _pickImageFromSource(ImageSource.camera);
-                    },
-                  ),
-                ),
+                Expanded(child: _buildImageSourceOption(
+                  icon: Icons.camera_alt,
+                  title: 'Camera',
+                  subtitle: 'Take new photo',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImageFromSource(ImageSource.camera);
+                  },
+                )),
                 SizedBox(width: 16),
-                Expanded(
-                  child: _buildImageSourceOption(
-                    icon: Icons.photo_library,
-                    title: 'Gallery',
-                    subtitle: 'Choose existing',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _pickImageFromSource(ImageSource.gallery);
-                    },
-                  ),
-                ),
+                Expanded(child: _buildImageSourceOption(
+                  icon: Icons.photo_library,
+                  title: 'Gallery',
+                  subtitle: 'Choose existing',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImageFromSource(ImageSource.gallery);
+                  },
+                )),
               ],
             ),
             SizedBox(height: 20),
@@ -185,38 +150,20 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
   
-  Widget _buildImageSourceOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildImageSourceOption({required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(12)),
         child: Column(
           children: [
             Icon(icon, size: 32, color: widget.isAdmin ? Colors.orange : AppTheme.primaryColor),
             SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
             SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -225,7 +172,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   
   Future<void> _pickImageFromSource(ImageSource source) async {
     try {
-      _logDebug('Opening image picker from ${source.name}...');
+      print('📷 Opening image picker...');
       final picker = ImagePicker();
       
       final pickedFile = await picker.pickImage(
@@ -245,16 +192,13 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         }
         
         try {
-          setState(() {
-            _isSavingImages = true;
-          });
+          setState(() => _isSavingImages = true);
           
           final processedImageFile = await _processImageForAnalysis(imageFile, source);
-          
           final folder = widget.isAdmin ? 'admin_reports' : 'reports';
           final localPath = await _storageService.uploadImage(processedImageFile, folder);
           
-          _logDebug('Image saved to local storage: $localPath');
+          print('📁 Image saved to local storage: $localPath');
           
           setState(() {
             _imageFiles.add(File(localPath));
@@ -262,48 +206,35 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             _isSavingImages = false;
           });
           
-          // FIXED: Reset analysis results when new image added
+          // Reset analysis results when new image added
           if (_imageFiles.length == 1) {
-            setState(() {
-              _detectedQuality = WaterQualityState.unknown;
-              _confidence = null;
-              _originalClass = null;
-              _waterDetected = false;
-              _analysisMessage = null;
-              _analysisCompleted = false;
-              _detectionError = null;
-              _isLowConfidence = false; // ADDED
-            });
+            _resetAnalysisState();
           }
           
           _showMessage('Image processed and saved successfully!', isError: false);
           
           if (_imageFiles.length == 1) {
-            _logDebug('Auto-analyzing first image with LOW CONFIDENCE handling...');
+            print('🔬 Auto-analyzing first image...');
             await _detectWaterQuality(File(localPath));
           }
           
         } catch (e) {
-          setState(() {
-            _isSavingImages = false;
-          });
+          setState(() => _isSavingImages = false);
           _showMessage('Error processing image: $e', isError: true);
         }
       }
     } catch (e) {
-      setState(() {
-        _isSavingImages = false;
-      });
+      setState(() => _isSavingImages = false);
       _showMessage('Error picking image: $e', isError: true);
     }
   }
 
   Future<File> _processImageForAnalysis(File originalFile, ImageSource source) async {
     try {
-      _logDebug('🔧 Processing image for water quality analysis...');
+      print('🔧 Processing image for analysis...');
       
       final imageBytes = await originalFile.readAsBytes();
-      _logDebug('Original size: ${(imageBytes.length / 1024).toStringAsFixed(2)} KB');
+      print('📏 Original size: ${(imageBytes.length / 1024).toStringAsFixed(2)} KB');
       
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -313,68 +244,55 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       
       if (await processedFile.exists()) {
         final processedSize = await processedFile.length();
-        _logDebug('Processed size: ${(processedSize / 1024).toStringAsFixed(2)} KB');
-        _logDebug('✅ Image processing complete - ready for analysis');
+        print('✅ Image processed: ${(processedSize / 1024).toStringAsFixed(2)} KB');
         return processedFile;
       } else {
         throw Exception('Failed to create processed image');
       }
       
     } catch (e) {
-      _logDebug('❌ Error processing image: $e');
+      print('❌ Error processing image: $e');
       return originalFile;
     }
   }
 
-  // FIXED: Enhanced water quality detection with low confidence handling
+  // ENHANCED: Water quality detection with comprehensive error handling
   Future<void> _detectWaterQuality(File image) async {
     try {
-      setState(() {
-        _isDetecting = true;
-        _detectedQuality = WaterQualityState.unknown;
-        _confidence = null;
-        _originalClass = null;
-        _waterDetected = false;
-        _analysisMessage = null;
-        _analysisCompleted = false;
-        _detectionError = null;
-        _isLowConfidence = false; // ADDED
-      });
+      _resetAnalysisState();
+      setState(() => _isDetecting = true);
       
-      _logDebug('🔬 Starting water quality detection...');
-      _logDebug('📁 Image file: ${image.path}');
-      _logDebug('📤 Sending to backend: ${image.path}');
-      _logDebug('📤 File exists: ${await image.exists()}');
-      _logDebug('📤 File size: ${await image.length()} bytes');
+      print('🔬 Starting enhanced water quality detection...');
       
+      // Validate image file
       if (!await image.exists()) {
         throw Exception('Image file does not exist');
       }
       
       final fileSize = await image.length();
-      _logDebug('📏 Image size: ${fileSize} bytes');
-      
       if (fileSize == 0) {
         throw Exception('Image file is empty');
       }
       
-      _logDebug('🔗 Testing backend connection...');
+      print('📏 Image size: ${fileSize} bytes');
+      
+      // Test backend connection
       final isConnected = await _apiService.testBackendConnection();
       if (!isConnected) {
-        throw Exception('Backend server is not running.\n\nPlease start Python server:\n1. cd backend_version_2\n2. python main.py\n3. Ensure server runs on port 8000');
+        throw Exception('Backend server is not running. Please start the Python server.');
       }
       
-      _logDebug('✅ Backend connected, sending image for analysis...');
+      print('✅ Backend connected, analyzing image...');
       
+      // Analyze water quality with comprehensive error handling
       final result = await _apiService.analyzeWaterQualityWithConfidence(image);
       
-      _logDebug('✅ API Analysis completed');
-      _logDebug('🔍 Water detected: ${result.waterDetected}');
-      _logDebug('🎯 Quality: ${result.waterQuality}');
-      _logDebug('📊 Confidence: ${result.confidence}%');
-      _logDebug('🏷️ Original class: ${result.originalClass}');
-      _logDebug('⚠️ Is low confidence: ${result.isLowConfidence}');
-      _logDebug('📝 Message: ${result.errorMessage}');
+      print('📊 Analysis result:');
+      print('   Water detected: ${result.waterDetected}');
+      print('   Quality: ${result.waterQuality}');
+      print('   Confidence: ${result.confidence}%');
+      print('   Low confidence: ${result.isLowConfidence}');
+      print('   Message: ${result.errorMessage}');
       
       setState(() {
         _waterDetected = result.waterDetected;
@@ -384,112 +302,99 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         _analysisMessage = result.errorMessage;
         _analysisCompleted = true;
         _isDetecting = false;
-        _isLowConfidence = result.isLowConfidence; // ADDED
+        _isLowConfidence = result.isLowConfidence;
+        _canSubmitWithLowConfidence = true; // ENHANCED: Always allow submission
       });
       
-      // FIXED: Handle different analysis scenarios with proper low confidence handling
-      if (!result.waterDetected) {
-        // NO WATER DETECTED CASE
-        _logDebug('⚠️ No water detected in image');
-        
-        _showMessage(
-          'No water detected in image. Please take a photo that clearly shows water for quality analysis.',
-          isError: true,
-          duration: 6,
-        );
-        
-      } else if (result.waterDetected && result.isLowConfidence && result.waterQuality != WaterQualityState.unknown) {
-        // FIXED: LOW CONFIDENCE BUT VALID RESULTS CASE
-        _logDebug('⚠️ Water detected with LOW CONFIDENCE but valid analysis');
-        
-        final qualityText = WaterQualityUtils.getWaterQualityText(result.waterQuality);
-        
-        _showMessage(
-          'Water detected! Quality: $qualityText\nLow confidence (${result.confidence.toStringAsFixed(1)}%) - Consider retaking photo for better accuracy.',
-          isError: false,
-          duration: 7,
-        );
-        
-      } else if (result.waterDetected && result.confidence > 0) {
-        // HIGH CONFIDENCE WATER ANALYSIS CASE
-        _logDebug('✅ Water detected and analyzed with good confidence');
-        
-        final qualityText = WaterQualityUtils.getWaterQualityText(result.waterQuality);
-        String confidenceAssessment;
-        
-        if (result.confidence >= 90) {
-          confidenceAssessment = "EXCELLENT confidence";
-        } else if (result.confidence >= 80) {
-          confidenceAssessment = "HIGH confidence";
-        } else if (result.confidence >= 70) {
-          confidenceAssessment = "GOOD confidence";
-        } else if (result.confidence >= 60) {
-          confidenceAssessment = "Moderate confidence";
-        } else {
-          confidenceAssessment = "Low confidence";
-        }
-        
-        _showMessage(
-          'Water detected! Quality: $qualityText\n$confidenceAssessment (${result.confidence.toStringAsFixed(1)}%)',
-          isError: false,
-          duration: 5,
-        );
-        
-      } else if (result.waterDetected && result.confidence == 0) {
-        // WATER DETECTED BUT ANALYSIS FAILED CASE
-        _logDebug('⚠️ Water detected but analysis failed');
-        
-        final message = result.errorMessage ?? 'Analysis failed with very low confidence';
-        
-        _showMessage(
-          'Water detected but analysis failed: $message\nTry retaking the photo with better lighting.',
-          isError: true,
-          duration: 6,
-        );
-        
-      } else {
-        // UNKNOWN ERROR CASE
-        _logDebug('❓ Unknown analysis result');
-        
-        final message = result.errorMessage ?? 'Unknown analysis error';
-        
-        _showMessage(
-          'Analysis error: $message',
-          isError: true,
-          duration: 5,
-        );
-      }
+      // ENHANCED: Handle all possible scenarios without blocking submission
+      _handleAnalysisResult(result);
       
     } catch (e) {
-      _logDebug('❌ Analysis failed: $e');
+      print('❌ Analysis failed: $e');
       
       setState(() {
         _isDetecting = false;
-        _detectedQuality = WaterQualityState.unknown;
-        _confidence = null;
-        _originalClass = null;
-        _waterDetected = false;
         _analysisCompleted = true;
         _detectionError = e.toString();
-        _isLowConfidence = false; // ADDED
+        _canSubmitWithLowConfidence = true; // ENHANCED: Allow submission even on error
       });
       
-      String errorMessage = 'Water quality analysis failed: ';
-      
-      if (e.toString().contains('Backend server') || e.toString().contains('backend')) {
-        errorMessage += 'Backend server not running. Please start the Python server (main.py).';
-      } else if (e.toString().contains('network') || e.toString().contains('connection')) {
-        errorMessage += 'Network connection error. Check your connection and try again.';
-      } else if (e.toString().contains('timeout')) {
-        errorMessage += 'Analysis timeout. Try with a smaller image or check server.';
-      } else if (e.toString().contains('Image file')) {
-        errorMessage += 'Image file error. Please try taking a new photo.';
-      } else {
-        errorMessage += e.toString().length > 100 ? 'Internal error occurred' : e.toString();
-      }
-      
-      _showMessage(errorMessage, isError: true, duration: 8);
+      _handleAnalysisError(e);
     }
+  }
+  
+  // ENHANCED: Handle analysis results without blocking user
+  void _handleAnalysisResult(WaterAnalysisResult result) {
+    if (!result.waterDetected) {
+      // NO WATER DETECTED
+      _showMessage(
+        'No water detected in image. You can still submit the report, but consider adding photos that clearly show water.',
+        isError: false,
+        duration: 6,
+      );
+      
+    } else if (result.isLowConfidence) {
+      // LOW CONFIDENCE BUT DETECTED
+      final qualityText = WaterQualityUtils.getWaterQualityText(result.waterQuality);
+      
+      _showMessage(
+        'Water detected! Quality: $qualityText\nLow confidence (${result.confidence?.toStringAsFixed(1)}%) - You can still submit this report.',
+        isError: false,
+        duration: 7,
+      );
+      
+    } else if (result.confidence != null && result.confidence! > 0) {
+      // HIGH CONFIDENCE
+      final qualityText = WaterQualityUtils.getWaterQualityText(result.waterQuality);
+      String confidenceLevel = result.confidence! >= 80 ? "High" : (result.confidence! >= 60 ? "Good" : "Moderate");
+      
+      _showMessage(
+        'Water detected! Quality: $qualityText\n$confidenceLevel confidence (${result.confidence!.toStringAsFixed(1)}%)',
+        isError: false,
+        duration: 5,
+      );
+      
+    } else {
+      // ANALYSIS FAILED BUT WATER DETECTED
+      _showMessage(
+        'Water detected but analysis had issues. You can still submit the report with your observations.',
+        isError: false,
+        duration: 6,
+      );
+    }
+  }
+  
+  // ENHANCED: Handle analysis errors gracefully
+  void _handleAnalysisError(dynamic error) {
+    String userFriendlyMessage = 'Analysis error occurred, but you can still submit your report manually.';
+    
+    final errorStr = error.toString().toLowerCase();
+    
+    if (errorStr.contains('backend') || errorStr.contains('server')) {
+      userFriendlyMessage = 'Backend server not available. You can still submit the report without AI analysis.';
+    } else if (errorStr.contains('network') || errorStr.contains('connection')) {
+      userFriendlyMessage = 'Network connection issue. You can still submit the report offline.';
+    } else if (errorStr.contains('timeout')) {
+      userFriendlyMessage = 'Analysis timeout. You can still submit the report with your manual assessment.';
+    } else if (errorStr.contains('image')) {
+      userFriendlyMessage = 'Image processing issue. Try another photo or submit with current observations.';
+    }
+    
+    _showMessage(userFriendlyMessage, isError: false, duration: 8);
+  }
+  
+  void _resetAnalysisState() {
+    setState(() {
+      _detectedQuality = WaterQualityState.unknown;
+      _confidence = null;
+      _originalClass = null;
+      _waterDetected = false;
+      _analysisMessage = null;
+      _analysisCompleted = false;
+      _detectionError = null;
+      _isLowConfidence = false;
+      _canSubmitWithLowConfidence = false;
+    });
   }
   
   void _removeImage(int index) {
@@ -502,28 +407,22 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         _savedImagePaths.removeAt(index);
         
         if (_imageFiles.isEmpty) {
-          _detectedQuality = WaterQualityState.unknown;
-          _confidence = null;
-          _originalClass = null;
-          _waterDetected = false;
-          _analysisMessage = null;
-          _analysisCompleted = false;
-          _detectionError = null;
-          _isLowConfidence = false; // ADDED
+          _resetAnalysisState();
         }
       });
       
       try {
         if (file.existsSync()) {
           file.deleteSync();
-          _logDebug('Deleted local file: $localPath');
+          print('🗑️ Deleted local file: $localPath');
         }
       } catch (e) {
-        _logDebug('Error deleting local file: $e');
+        print('❌ Error deleting local file: $e');
       }
     }
   }
   
+  // ENHANCED: Allow submission regardless of analysis state
   Future<void> _submitReport() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -534,19 +433,20 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       return;
     }
     
-    setState(() {
-      _isLoading = true;
-    });
+    // ENHANCED: Show confirmation dialog for low confidence or no analysis
+    if ((_isLowConfidence || _detectionError != null || !_waterDetected) && _imageFiles.isNotEmpty) {
+      final shouldContinue = await _showSubmissionConfirmationDialog();
+      if (!shouldContinue) return;
+    }
+    
+    setState(() => _isLoading = true);
     
     try {
-      _logDebug('Starting report submission...');
+      print('📝 Starting report submission...');
       
       final imageUrls = List<String>.from(_savedImagePaths);
       
-      _logDebug('Using ${imageUrls.length} local image paths');
-      for (int i = 0; i < imageUrls.length; i++) {
-        _logDebug('Image ${i + 1}: ${imageUrls[i]}');
-      }
+      print('📸 Using ${imageUrls.length} local image paths');
       
       final now = DateTime.now();
       final report = ReportModel(
@@ -566,40 +466,94 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       
       final reportId = await _databaseService.createReport(report);
       
-      _logDebug('✅ Report created successfully with ID: $reportId');
+      print('✅ Report created successfully with ID: $reportId');
       
       if (mounted) {
-        String successMessage = 'Report submitted successfully with ${imageUrls.length} image${imageUrls.length == 1 ? '' : 's'}!';
-        
-        // FIXED: Add analysis summary including low confidence results
-        if (_analysisCompleted && _waterDetected && _confidence != null) {
-          if (_isLowConfidence) {
-            successMessage += '\nLow confidence analysis included (${_confidence!.toStringAsFixed(1)}%) - Consider retaking photos for better accuracy.';
-          } else if (_confidence! >= 80) {
-            successMessage += '\nHigh confidence analysis included (${_confidence!.toStringAsFixed(1)}%)';
-          } else if (_confidence! >= 60) {
-            successMessage += '\nModerate confidence analysis included (${_confidence!.toStringAsFixed(1)}%)';
-          } else {
-            successMessage += '\nLow confidence analysis included (${_confidence!.toStringAsFixed(1)}%)';
-          }
-        } else if (_analysisCompleted && !_waterDetected) {
-          successMessage += '\nNote: No water detected in images';
-        }
-        
+        String successMessage = _buildSuccessMessage(imageUrls.length);
         _showMessage(successMessage, isError: false, duration: 6);
-        
         Navigator.pop(context);
       }
+      
     } catch (e) {
-      _logDebug('❌ Error submitting report: $e');
+      print('❌ Error submitting report: $e');
       _showMessage('Error submitting report: $e', isError: true);
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
+  }
+  
+  // NEW: Show confirmation dialog for problematic submissions
+  Future<bool> _showSubmissionConfirmationDialog() async {
+    String title = 'Confirm Submission';
+    String message = '';
+    
+    if (_detectionError != null) {
+      title = 'Submit Without Analysis?';
+      message = 'AI analysis failed, but you can still submit this report with your manual observations. Continue?';
+    } else if (!_waterDetected && _imageFiles.isNotEmpty) {
+      title = 'No Water Detected';
+      message = 'AI did not detect water in your images. Do you still want to submit this report?';
+    } else if (_isLowConfidence) {
+      title = 'Low Confidence Result';
+      message = 'AI analysis has low confidence (${_confidence?.toStringAsFixed(1)}%). The result might not be accurate. Continue with submission?';
+    } else {
+      return true; // No confirmation needed
+    }
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.help_outline, color: Colors.orange),
+              SizedBox(width: 8),
+              Text(title),
+            ],
+          ),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Submit Anyway'),
+            ),
+          ],
+        );
+      },
+    );
+    
+    return result ?? false;
+  }
+  
+  String _buildSuccessMessage(int imageCount) {
+    String baseMessage = 'Report submitted successfully with $imageCount image${imageCount == 1 ? '' : 's'}!';
+    
+    if (_analysisCompleted && _waterDetected && _confidence != null) {
+      if (_isLowConfidence) {
+        baseMessage += '\nSubmitted with low confidence analysis (${_confidence!.toStringAsFixed(1)}%).';
+      } else if (_confidence! >= 80) {
+        baseMessage += '\nHigh confidence analysis included (${_confidence!.toStringAsFixed(1)}%).';
+      } else {
+        baseMessage += '\nAnalysis included with ${_confidence!.toStringAsFixed(1)}% confidence.';
+      }
+    } else if (_analysisCompleted && !_waterDetected) {
+      baseMessage += '\nSubmitted without water detection - manual assessment included.';
+    } else if (_detectionError != null) {
+      baseMessage += '\nSubmitted without AI analysis - manual assessment recorded.';
+    }
+    
+    return baseMessage;
   }
   
   void _showMessage(String message, {required bool isError, int duration = 4}) {
@@ -608,17 +562,9 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         SnackBar(
           content: Row(
             children: [
-              Icon(
-                isError ? Icons.error : Icons.check_circle, 
-                color: Colors.white,
-              ),
+              Icon(isError ? Icons.error : Icons.check_circle, color: Colors.white),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
-                  style: TextStyle(fontSize: 14),
-                ),
-              ),
+              Expanded(child: Text(message, style: TextStyle(fontSize: 14))),
             ],
           ),
           backgroundColor: isError ? Colors.red : Colors.green,
@@ -657,14 +603,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                     children: [
                       Icon(Icons.folder, size: 12, color: Colors.white),
                       SizedBox(width: 4),
-                      Text(
-                        '${_imageFiles.length}/$_maxImages',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      Text('${_imageFiles.length}/$_maxImages', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
                     ],
                   ),
                 ),
@@ -673,11 +612,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         ],
       ),
       body: _isLoading && !_isSavingImages
-        ? Center(
-            child: WaterFillLoader(
-              message: 'Getting your location...',
-            ),
-          )
+        ? Center(child: WaterFillLoader(message: 'Getting your location...'))
         : SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Form(
@@ -686,15 +621,10 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (widget.isAdmin) _buildAdminIndicator(),
-                  
                   _buildImageSection(themeColor),
-                  
                   const SizedBox(height: 16),
-                  
                   _buildDetailsSection(),
-                  
                   const SizedBox(height: 24),
-                  
                   _buildSubmitButton(themeColor),
                 ],
               ),
@@ -703,8 +633,171 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
   
-  // FIXED: Enhanced image tile to show low confidence status
-  Widget _buildModernImageTile(int index, Color themeColor) {
+  // ENHANCED: Better status indicators
+  Widget _buildImageSection(Color themeColor) {
+    return Column(
+      children: [
+        // Header Card
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [themeColor.withOpacity(0.1), themeColor.withOpacity(0.05)],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(12)),
+                        child: Icon(Icons.analytics, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.isAdmin ? 'Enhanced AI Analysis' : 'Smart Water Detection',
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_imageFiles.length}/$_maxImages photos • Enhanced error handling',
+                              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_imageFiles.length < _maxImages)
+                        Container(
+                          decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(12)),
+                          child: IconButton(
+                            onPressed: _isSavingImages ? null : _pickImage,
+                            icon: _isSavingImages 
+                                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+                                : Icon(Icons.add, color: Colors.white),
+                            tooltip: 'Add Photo',
+                          ),
+                        ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // ENHANCED: Status banner
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor().withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _getStatusColor().withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: _getStatusColor(), borderRadius: BorderRadius.circular(8)),
+                          child: Icon(_getStatusIcon(), color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_getStatusTitle(), style: TextStyle(fontWeight: FontWeight.bold, color: _getStatusColor(), fontSize: 16)),
+                              const SizedBox(height: 4),
+                              Text(_getStatusSubtitle(), style: TextStyle(color: _getStatusColor().withOpacity(0.8), fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Photos Grid
+        if (_imageFiles.isNotEmpty) _buildPhotosGrid(themeColor),
+        
+        const SizedBox(height: 16),
+        
+        // Camera Button
+        _buildCameraButton(themeColor),
+        
+        const SizedBox(height: 16),
+        
+        // Analysis Results
+        if (_isDetecting) _buildAnalyzingCard(themeColor)
+        else if (_analysisCompleted) _buildAnalysisResultCard(themeColor)
+        else if (_imageFiles.isNotEmpty) _buildAnalysisPrompt(themeColor),
+      ],
+    );
+  }
+
+  Widget _buildPhotosGrid(Color themeColor) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Saved Photos', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Spacer(),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getAnalysisStatusColor().withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_getAnalysisStatusIcon(), size: 12, color: _getAnalysisStatusColor()),
+                      SizedBox(width: 4),
+                      Text(_getAnalysisStatusText(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getAnalysisStatusColor())),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: _imageFiles.length,
+              itemBuilder: (context, index) => _buildImageTile(index, themeColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageTile(int index, Color themeColor) {
     final isMainPhoto = index == 0;
     final file = _imageFiles[index];
     
@@ -723,10 +816,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               width: double.infinity,
               height: double.infinity,
               child: file.existsSync()
-                  ? Image.file(
-                      file,
-                      fit: BoxFit.cover,
-                    )
+                  ? Image.file(file, fit: BoxFit.cover)
                   : Container(
                       color: Colors.grey.shade200,
                       child: Column(
@@ -734,14 +824,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                         children: [
                           Icon(Icons.folder, color: Colors.grey.shade400, size: 20),
                           SizedBox(height: 4),
-                          Text(
-                            'Local\nStorage',
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: Colors.grey.shade600,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                          Text('Local\nStorage', style: TextStyle(fontSize: 8, color: Colors.grey.shade600), textAlign: TextAlign.center),
                         ],
                       ),
                     ),
@@ -755,49 +838,25 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             left: 4,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: themeColor,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                'MAIN',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(6)),
+              child: Text('MAIN', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
             ),
           ),
         
-        // FIXED: Analysis status indicator with low confidence handling
+        // Analysis status
         if (isMainPhoto && _analysisCompleted)
           Positioned(
             bottom: 4,
             left: 4,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: _getAnalysisStatusColor(),
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: _getAnalysisStatusColor(), borderRadius: BorderRadius.circular(4)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    _getAnalysisStatusIcon(),
-                    color: Colors.white,
-                    size: 8,
-                  ),
+                  Icon(_getAnalysisStatusIcon(), color: Colors.white, size: 8),
                   SizedBox(width: 2),
-                  Text(
-                    _getAnalysisStatusText(),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 6,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text(_getAnalysisStatusText(), style: TextStyle(color: Colors.white, fontSize: 6, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -810,15 +869,8 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             onTap: () => _removeImage(index),
             child: Container(
               padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.close,
-                color: Colors.white,
-                size: 12,
-              ),
+              decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.close, color: Colors.white, size: 12),
             ),
           ),
         ),
@@ -826,382 +878,83 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  // FIXED: Helper methods for analysis status
-  Color _getAnalysisStatusColor() {
-    if (!_waterDetected) return Colors.orange;
-    if (_isLowConfidence) return Colors.amber;
-    if (_confidence != null && _confidence! >= 80) return Colors.green;
-    return Colors.lightGreen;
-  }
-  
-  IconData _getAnalysisStatusIcon() {
-    if (!_waterDetected) return Icons.warning;
-    if (_isLowConfidence) return Icons.info;
-    return Icons.check_circle;
-  }
-  
-  String _getAnalysisStatusText() {
-    if (!_waterDetected) return 'NO H2O';
-    if (_isLowConfidence) return 'LOW';
-    if (_confidence != null && _confidence! >= 80) return 'HIGH';
-    return 'OK';
-  }
-
-  // FIXED: Enhanced image section with low confidence handling
-  Widget _buildImageSection(Color themeColor) {
-    return Column(
-      children: [
-        // Header Card (same as before)
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  themeColor.withOpacity(0.1),
-                  themeColor.withOpacity(0.05),
-                ],
-              ),
+  Widget _buildCameraButton(Color themeColor) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Icon(
+              _isSavingImages ? Icons.hourglass_empty : Icons.add_a_photo,
+              size: 48,
+              color: _isSavingImages 
+                  ? Colors.orange 
+                  : _imageFiles.length < _maxImages 
+                      ? themeColor 
+                      : Colors.grey.shade400,
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: themeColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.analytics,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.isAdmin ? 'Advanced AI Analysis' : 'Enhanced Water Detection',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${_imageFiles.length}/$_maxImages photos • Low confidence handling',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_imageFiles.length < _maxImages)
-                        Container(
-                          decoration: BoxDecoration(
-                            color: themeColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            onPressed: _isSavingImages ? null : _pickImage,
-                            icon: _isSavingImages 
-                                ? SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                : Icon(Icons.add, color: Colors.white),
-                            tooltip: 'Add Photo',
-                          ),
-                        ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // FIXED: Enhanced status banner with low confidence info
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor().withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _getStatusColor().withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: _getStatusColor(),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(_getStatusIcon(), color: Colors.white, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _getStatusTitle(),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: _getStatusColor(),
-                                  fontSize: 16,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _getStatusSubtitle(),
-                                style: TextStyle(
-                                  color: _getStatusColor().withOpacity(0.8),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // Photos Grid Card (same as before but with enhanced status)
-        if (_imageFiles.isNotEmpty)
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Saved Photos',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Spacer(),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _getAnalysisStatusColor().withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _getAnalysisStatusIcon(),
-                              size: 12,
-                              color: _getAnalysisStatusColor(),
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              _getAnalysisStatusText(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _getAnalysisStatusColor(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: _imageFiles.length,
-                    itemBuilder: (context, index) {
-                      return _buildModernImageTile(index, themeColor);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        
-        const SizedBox(height: 16),
-        
-        // Camera Button Card (same as before)
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Icon(
-                  _isSavingImages ? Icons.hourglass_empty : Icons.add_a_photo,
-                  size: 48,
-                  color: _isSavingImages 
-                      ? Colors.orange 
+            const SizedBox(height: 12),
+            Text(
+              _isSavingImages
+                  ? 'Processing for Analysis...'
+                  : _imageFiles.isEmpty 
+                      ? 'Take Your First Photo' 
                       : _imageFiles.length < _maxImages 
-                          ? themeColor 
-                          : Colors.grey.shade400,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _isSavingImages
-                      ? 'Processing for Analysis...'
-                      : _imageFiles.isEmpty 
-                          ? 'Take Your First Photo' 
-                          : _imageFiles.length < _maxImages 
-                              ? 'Add Another Photo' 
-                              : 'Maximum Photos Reached',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: _isSavingImages || _imageFiles.length < _maxImages 
-                        ? Colors.black87 
-                        : Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _isSavingImages
-                      ? 'Preparing for water detection and quality analysis...'
-                      : _imageFiles.isEmpty
-                          ? 'AI will analyze for water presence and quality (handles low confidence results)'
-                          : 'Multiple photos improve detection accuracy',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: (_imageFiles.length < _maxImages && !_isSavingImages) ? _pickImage : null,
-                    icon: _isSavingImages
-                        ? SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : Icon(
-                            _imageFiles.isEmpty ? Icons.camera_alt : Icons.add_a_photo,
-                          ),
-                    label: Text(
-                      _isSavingImages
-                          ? 'Processing...'
-                          : _imageFiles.isEmpty 
-                              ? 'Take Photo' 
-                              : _imageFiles.length < _maxImages 
-                                  ? 'Add More Photos' 
-                                  : 'Limit Reached',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _imageFiles.length < _maxImages && !_isSavingImages
-                          ? themeColor 
-                          : Colors.grey.shade400,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-              ],
+                          ? 'Add Another Photo' 
+                          : 'Maximum Photos Reached',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: _isSavingImages || _imageFiles.length < _maxImages 
+                    ? Colors.black87 
+                    : Colors.grey.shade600,
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              _isSavingImages
+                  ? 'Preparing for enhanced water detection...'
+                  : _imageFiles.isEmpty
+                      ? 'AI will analyze for water presence and quality (with error recovery)'
+                      : 'Multiple photos improve detection accuracy',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (_imageFiles.length < _maxImages && !_isSavingImages) ? _pickImage : null,
+                icon: _isSavingImages
+                    ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+                    : Icon(_imageFiles.isEmpty ? Icons.camera_alt : Icons.add_a_photo),
+                label: Text(
+                  _isSavingImages
+                      ? 'Processing...'
+                      : _imageFiles.isEmpty 
+                          ? 'Take Photo' 
+                          : _imageFiles.length < _maxImages 
+                              ? 'Add More Photos' 
+                              : 'Limit Reached',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _imageFiles.length < _maxImages && !_isSavingImages ? themeColor : Colors.grey.shade400,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
         ),
-        
-        const SizedBox(height: 16),
-        
-        // Analysis State Cards (same logic as before)
-        if (_isDetecting)
-          _buildAnalyzingCard(themeColor)
-        else if (_analysisCompleted)
-          _buildAnalysisResultCard(themeColor)
-        else if (_imageFiles.isNotEmpty)
-          _buildAnalysisPrompt(themeColor),
-      ],
+      ),
     );
   }
 
-  // FIXED: Helper methods for status display with low confidence handling
-  Color _getStatusColor() {
-    if (_isDetecting) return Colors.blue;
-    if (_analysisCompleted && _waterDetected && _isLowConfidence) return Colors.amber;
-    if (_analysisCompleted && _waterDetected) return Colors.green;
-    if (_analysisCompleted && !_waterDetected) return Colors.orange;
-    if (_detectionError != null) return Colors.red;
-    return Colors.grey;
-  }
-  
-  IconData _getStatusIcon() {
-    if (_isDetecting) return Icons.search;
-    if (_analysisCompleted && _waterDetected && _isLowConfidence) return Icons.info;
-    if (_analysisCompleted && _waterDetected) return Icons.check_circle;
-    if (_analysisCompleted && !_waterDetected) return Icons.warning;
-    if (_detectionError != null) return Icons.error;
-    return Icons.psychology;
-  }
-  
-  String _getStatusTitle() {
-    if (_isDetecting) return 'Analyzing Image...';
-    if (_analysisCompleted && _waterDetected && _isLowConfidence) return 'Low Confidence Result';
-    if (_analysisCompleted && _waterDetected) return 'Water Quality Analyzed';
-    if (_analysisCompleted && !_waterDetected) return 'No Water Detected';
-    if (_detectionError != null) return 'Analysis Error';
-    return 'Enhanced AI Ready';
-  }
-  
-  String _getStatusSubtitle() {
-    if (_isDetecting) return 'Smart AI is checking for water presence and quality';
-    if (_analysisCompleted && _waterDetected && _isLowConfidence) return 'Water detected but low confidence - consider retaking photo';
-    if (_analysisCompleted && _waterDetected) return 'Quality analysis completed successfully';
-    if (_analysisCompleted && !_waterDetected) return 'Please retake photo showing clear water';
-    if (_detectionError != null) return 'Check connection and try again';
-    return 'Automatic water detection with quality analysis (handles all confidence levels)';
-  }
-
-  // Keep all other build methods the same...
   Widget _buildAnalyzingCard(Color themeColor) {
     return Card(
       elevation: 4,
@@ -1212,10 +965,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.blue.shade50,
-              Colors.blue.shade100.withOpacity(0.3),
-            ],
+            colors: [Colors.blue.shade50, Colors.blue.shade100.withOpacity(0.3)],
           ),
         ),
         child: Padding(
@@ -1227,69 +977,31 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 height: 80,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [Colors.blue, Colors.blue.shade300],
-                  ),
+                  gradient: LinearGradient(colors: [Colors.blue, Colors.blue.shade300]),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 4,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 4, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
                 ),
               ),
-              
               const SizedBox(height: 20),
-              
-              Text(
-                'Enhanced Water Detection',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade800,
-                ),
-              ),
-              
+              Text('Enhanced Water Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
               const SizedBox(height: 8),
-              
               Text(
-                'AI is analyzing your image to detect water presence and assess quality. All confidence levels are handled.',
-                style: TextStyle(
-                  color: Colors.blue.shade600,
-                  fontSize: 14,
-                ),
+                'AI is analyzing your image with enhanced error handling. All scenarios are supported.',
+                style: TextStyle(color: Colors.blue.shade600, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
-              
               const SizedBox(height: 16),
-              
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
-                  borderRadius: BorderRadius.circular(20),
-                ),
+                decoration: BoxDecoration(color: Colors.blue.shade100, borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
+                    Container(width: 8, height: 8, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
                     const SizedBox(width: 8),
-                    Text(
-                      'Backend: Low Confidence Handling',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text('Backend: Enhanced Error Recovery', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -1310,10 +1022,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              themeColor.withOpacity(0.1),
-              themeColor.withOpacity(0.05),
-            ],
+            colors: [themeColor.withOpacity(0.1), themeColor.withOpacity(0.05)],
           ),
         ),
         child: Padding(
@@ -1322,61 +1031,29 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: themeColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.psychology,
-                  size: 40,
-                  color: themeColor,
-                ),
+                decoration: BoxDecoration(color: themeColor.withOpacity(0.1), shape: BoxShape.circle),
+                child: Icon(Icons.psychology, size: 40, color: themeColor),
               ),
-              
               const SizedBox(height: 16),
-              
-              Text(
-                'Ready for Water Detection',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: themeColor,
-                ),
-              ),
-              
+              Text('Ready for Water Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
               const SizedBox(height: 8),
-              
               Text(
-                'Your photos are ready for AI analysis. The system will detect water and analyze quality, including low confidence results.',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
+                'Your photos are ready for AI analysis with enhanced error handling. Analysis will work even with challenging images.',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.4),
                 textAlign: TextAlign.center,
               ),
-              
               const SizedBox(height: 20),
-              
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () => _detectWaterQuality(_imageFiles.first),
                   icon: Icon(Icons.search, size: 24),
-                  label: Text(
-                    'Start Water Detection',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  label: Text('Start Water Detection', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeColor,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 2,
                   ),
                 ),
@@ -1388,13 +1065,13 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  // FIXED: Enhanced result card with low confidence handling
+  // ENHANCED: Comprehensive analysis result display
   Widget _buildAnalysisResultCard(Color themeColor) {
     if (!_analysisCompleted) return Container();
     
-    final resultColor = _waterDetected 
+    Color resultColor = _waterDetected 
         ? (_isLowConfidence ? Colors.amber : WaterQualityUtils.getWaterQualityColor(_detectedQuality))
-        : Colors.orange;
+        : (_detectionError != null ? Colors.red : Colors.orange);
     
     return Card(
       elevation: 6,
@@ -1405,10 +1082,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.white,
-              resultColor.withOpacity(0.03),
-            ],
+            colors: [Colors.white, resultColor.withOpacity(0.03)],
           ),
         ),
         child: Padding(
@@ -1422,49 +1096,19 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: _waterDetected 
-                            ? (_isLowConfidence 
-                                ? [Colors.amber, Colors.amber.shade400]
-                                : [Colors.green, Colors.green.shade400])
-                            : [Colors.orange, Colors.orange.shade400],
-                      ),
+                      gradient: LinearGradient(colors: [resultColor, resultColor.withOpacity(0.8)]),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
-                      _waterDetected 
-                          ? (_isLowConfidence ? Icons.info : Icons.check_circle)
-                          : Icons.warning,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child: Icon(_getResultIcon(), color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _waterDetected 
-                              ? (_isLowConfidence ? 'Low Confidence Result' : 'Analysis Complete')
-                              : 'Water Not Detected',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text(_getResultTitle(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
-                        Text(
-                          _waterDetected 
-                              ? (_isLowConfidence 
-                                  ? 'Water detected but consider retaking photo'
-                                  : 'Water quality analyzed successfully')
-                              : 'No water found in image',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
+                        Text(_getResultSubtitle(), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                       ],
                     ),
                   ),
@@ -1478,340 +1122,252 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               
               const SizedBox(height: 24),
               
-              // Main result display
-              if (_waterDetected) ...[
-                // WATER DETECTED - SHOW QUALITY RESULTS (including low confidence)
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: resultColor.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: resultColor.withOpacity(0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: resultColor,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: resultColor.withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              WaterQualityUtils.getWaterQualityIcon(_detectedQuality),
-                              color: Colors.white,
-                              size: 36,
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  WaterQualityUtils.getWaterQualityText(_detectedQuality),
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: resultColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    if (_originalClass != null && _originalClass!.isNotEmpty)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: resultColor.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: Text(
-                                          'Class: $_originalClass',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: resultColor,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    
-                                    // ADDED: Low confidence indicator
-                                    if (_isLowConfidence) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.amber.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.amber.withOpacity(0.5)),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.info, size: 12, color: Colors.amber.shade700),
-                                            SizedBox(width: 4),
-                                            Text(
-                                              'LOW CONF',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.amber.shade700,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      // Confidence section
-                      if (_confidence != null) ...[
-                        const SizedBox(height: 24),
-                        Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Confidence Level',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: _getConfidenceColor(_confidence!),
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: _getConfidenceColor(_confidence!).withOpacity(0.3),
-                                        blurRadius: 8,
-                                        offset: Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (_isLowConfidence)
-                                        Icon(Icons.info, color: Colors.white, size: 14),
-                                      if (_isLowConfidence)
-                                        SizedBox(width: 4),
-                                      Text(
-                                        '${_confidence!.toStringAsFixed(1)}%',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            Text(
-                              _getConfidenceLevelText(_confidence!),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: _getConfidenceColor(_confidence!),
-                              ),
-                            ),
-                            
-                            const SizedBox(height: 16),
-                            Container(
-                              height: 12,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(6),
-                                color: Colors.grey.shade200,
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: LinearProgressIndicator(
-                                  value: _confidence! / 100,
-                                  backgroundColor: Colors.transparent,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    _getConfidenceColor(_confidence!),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
+              // Main result content
+              _buildResultContent(resultColor),
+              
+              const SizedBox(height: 16),
+              
+              // ENHANCED: Always show submission option
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [Colors.green.shade50, Colors.green.shade100.withOpacity(0.3)]),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.shade200),
                 ),
-                
-                const SizedBox(height: 20),
-                
-                // Description
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    WaterQualityUtils.getWaterQualityDescription(_detectedQuality),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.5,
-                      color: Colors.black87,
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Report can be submitted regardless of analysis result. Your manual observations are valuable.',
+                        style: TextStyle(fontSize: 12, color: Colors.green.shade800, fontWeight: FontWeight.w500),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                
-                // ADDED: Low confidence guidance
-                if (_isLowConfidence) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.amber.shade50, Colors.amber.shade100.withOpacity(0.3)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.amber.shade200),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.lightbulb, color: Colors.amber.shade700, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Low Confidence Result:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.amber.shade800,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          _analysisMessage ?? 'The analysis found water and determined quality, but confidence is below the preferred threshold. Consider retaking the photo with better lighting or a clearer view of the water for higher accuracy.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.amber.shade800,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ] else ...[
-                // NO WATER DETECTED - SHOW GUIDANCE (same as before)
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.orange.withOpacity(0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.warning_amber,
-                        size: 48,
-                        color: Colors.orange,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No Water Detected',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange.shade800,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _analysisMessage ?? 'The AI system could not detect water in your image.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.orange.shade700,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.lightbulb, color: Colors.blue, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Tips for Better Detection:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              '• Take photo showing clear water surface\n'
-                              '• Ensure good lighting conditions\n'
-                              '• Avoid photos with only containers or pipes\n'
-                              '• Include water body in the frame',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.blue.shade700,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+  
+  Widget _buildResultContent(Color resultColor) {
+    if (_detectionError != null) {
+      // ERROR CASE
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('Analysis Error', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+            const SizedBox(height: 8),
+            Text(
+              'AI analysis encountered an error, but you can still submit this report with your manual assessment.',
+              style: TextStyle(fontSize: 14, color: Colors.red.shade700),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    } else if (!_waterDetected) {
+      // NO WATER DETECTED
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.warning_amber, size: 48, color: Colors.orange),
+            const SizedBox(height: 16),
+            Text('No Water Detected', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+            const SizedBox(height: 8),
+            Text(
+              _analysisMessage ?? 'AI did not detect water in your image. You can still submit if you observed water quality issues.',
+              style: TextStyle(fontSize: 14, color: Colors.orange.shade700),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    } else {
+      // WATER DETECTED
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: resultColor.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: resultColor.withOpacity(0.2)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: resultColor,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [BoxShadow(color: resultColor.withOpacity(0.3), blurRadius: 8, offset: Offset(0, 4))],
+                  ),
+                  child: Icon(WaterQualityUtils.getWaterQualityIcon(_detectedQuality), color: Colors.white, size: 32),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        WaterQualityUtils.getWaterQualityText(_detectedQuality),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: resultColor),
+                      ),
+                      const SizedBox(height: 4),
+                      if (_originalClass != null && _originalClass!.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: resultColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('Class: $_originalClass', style: TextStyle(fontSize: 10, color: resultColor, fontWeight: FontWeight.w600)),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            if (_confidence != null) ...[
+              const SizedBox(height: 16),
+              Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Confidence Level', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _getConfidenceColor(_confidence!),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text('${_confidence!.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 8,
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: Colors.grey.shade200),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: _confidence! / 100,
+                        backgroundColor: Colors.transparent,
+                        valueColor: AlwaysStoppedAnimation<Color>(_getConfidenceColor(_confidence!)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+  }
+
+  // Helper methods for status display
+  Color _getStatusColor() {
+    if (_isDetecting) return Colors.blue;
+    if (_detectionError != null) return Colors.red;
+    if (_analysisCompleted && !_waterDetected) return Colors.orange;
+    if (_analysisCompleted && _isLowConfidence) return Colors.amber;
+    if (_analysisCompleted && _waterDetected) return Colors.green;
+    return Colors.grey;
+  }
+  
+  IconData _getStatusIcon() {
+    if (_isDetecting) return Icons.search;
+    if (_detectionError != null) return Icons.error;
+    if (_analysisCompleted && !_waterDetected) return Icons.warning;
+    if (_analysisCompleted && _isLowConfidence) return Icons.info;
+    if (_analysisCompleted && _waterDetected) return Icons.check_circle;
+    return Icons.psychology;
+  }
+  
+  String _getStatusTitle() {
+    if (_isDetecting) return 'Analyzing Image...';
+    if (_detectionError != null) return 'Analysis Error (Can Still Submit)';
+    if (_analysisCompleted && !_waterDetected) return 'No Water Detected (Can Still Submit)';
+    if (_analysisCompleted && _isLowConfidence) return 'Low Confidence Result (Can Submit)';
+    if (_analysisCompleted && _waterDetected) return 'Water Quality Analyzed';
+    return 'Enhanced AI Ready';
+  }
+  
+  String _getStatusSubtitle() {
+    if (_isDetecting) return 'Smart AI is checking for water presence and quality';
+    if (_detectionError != null) return 'Error occurred but manual submission is available';
+    if (_analysisCompleted && !_waterDetected) return 'Submit with manual observations';
+    if (_analysisCompleted && _isLowConfidence) return 'Low confidence but result available';
+    if (_analysisCompleted && _waterDetected) return 'Quality analysis completed successfully';
+    return 'Automatic water detection with enhanced error handling';
+  }
+
+  Color _getAnalysisStatusColor() {
+    if (_detectionError != null) return Colors.red;
+    if (!_waterDetected && _analysisCompleted) return Colors.orange;
+    if (_isLowConfidence) return Colors.amber;
+    if (_confidence != null && _confidence! >= 80) return Colors.green;
+    return Colors.lightGreen;
+  }
+  
+  IconData _getAnalysisStatusIcon() {
+    if (_detectionError != null) return Icons.error;
+    if (!_waterDetected && _analysisCompleted) return Icons.warning;
+    if (_isLowConfidence) return Icons.info;
+    return Icons.check_circle;
+  }
+  
+  String _getAnalysisStatusText() {
+    if (_detectionError != null) return 'ERROR';
+    if (!_waterDetected && _analysisCompleted) return 'NO H2O';
+    if (_isLowConfidence) return 'LOW';
+    if (_confidence != null && _confidence! >= 80) return 'HIGH';
+    return 'OK';
+  }
+
+  IconData _getResultIcon() {
+    if (_detectionError != null) return Icons.error;
+    if (!_waterDetected) return Icons.warning_amber;
+    if (_isLowConfidence) return Icons.info;
+    return Icons.check_circle;
+  }
+  
+  String _getResultTitle() {
+    if (_detectionError != null) return 'Analysis Error';
+    if (!_waterDetected) return 'No Water Detected';
+    if (_isLowConfidence) return 'Low Confidence Result';
+    return 'Water Quality Analyzed';
+  }
+  
+  String _getResultSubtitle() {
+    if (_detectionError != null) return 'Error occurred but you can still submit';
+    if (!_waterDetected) return 'No water found but you can still submit';
+    if (_isLowConfidence) return 'Low confidence but result is available';
+    return 'Analysis completed successfully';
   }
 
   Color _getConfidenceColor(double confidence) {
@@ -1821,16 +1377,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     if (confidence >= 60) return Colors.deepOrange.shade600;
     return Colors.red.shade600;
   }
-  
-  String _getConfidenceLevelText(double confidence) {
-    if (confidence >= 90) return 'EXCELLENT CONFIDENCE';
-    if (confidence >= 80) return 'HIGH CONFIDENCE';
-    if (confidence >= 70) return 'GOOD CONFIDENCE';
-    if (confidence >= 60) return 'MODERATE CONFIDENCE';
-    return 'LOW CONFIDENCE';
-  }
 
-  // Keep all other build methods exactly the same...
   Widget _buildAdminIndicator() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -1843,10 +1390,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Colors.orange.shade50,
-                Colors.orange.shade100.withOpacity(0.3),
-              ],
+              colors: [Colors.orange.shade50, Colors.orange.shade100.withOpacity(0.3)],
             ),
           ),
           child: Padding(
@@ -1856,37 +1400,21 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.orange, Colors.orange.shade600],
-                    ),
+                    gradient: LinearGradient(colors: [Colors.orange, Colors.orange.shade600]),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.admin_panel_settings,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 24),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Admin Mode with Low Confidence Handling',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
+                      const Text('Admin Mode with Enhanced Error Handling', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                       const SizedBox(height: 6),
                       Text(
-                        'Advanced water detection with quality analysis - now handles all confidence levels properly',
-                        style: TextStyle(
-                          color: Colors.orange.shade800,
-                          fontSize: 14,
-                          height: 1.3,
-                        ),
+                        'Advanced water detection with comprehensive error recovery - all scenarios supported',
+                        style: TextStyle(color: Colors.orange.shade800, fontSize: 14, height: 1.3),
                       ),
                     ],
                   ),
@@ -1912,13 +1440,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               children: [
                 Icon(Icons.description, color: widget.isAdmin ? Colors.orange : AppTheme.primaryColor),
                 const SizedBox(width: 12),
-                Text(
-                  'Report Details',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text('Report Details', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 20),
@@ -2020,10 +1542,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              themeColor,
-              themeColor.withOpacity(0.8),
-            ],
+            colors: [themeColor, themeColor.withOpacity(0.8)],
           ),
         ),
         child: ElevatedButton(
@@ -2032,23 +1551,14 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             backgroundColor: Colors.transparent,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             elevation: 0,
           ),
           child: _isLoading || _isSavingImages
               ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
+                    const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
                     const SizedBox(width: 16),
                     Text(
                       _isSavingImages 
@@ -2056,27 +1566,18 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                         : widget.isAdmin
                           ? 'Creating admin report...'
                           : 'Submitting report...',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ],
                 )
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      widget.isAdmin ? Icons.admin_panel_settings : Icons.send,
-                      size: 24,
-                    ),
+                    Icon(widget.isAdmin ? Icons.admin_panel_settings : Icons.send, size: 24),
                     const SizedBox(width: 12),
                     Text(
                       widget.isAdmin ? 'Create Enhanced Report' : 'Submit Enhanced Report',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -2091,7 +1592,6 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     _descriptionController.dispose();
     _addressController.dispose();
     _reporterNameController.dispose();
-    
     super.dispose();
   }
 }

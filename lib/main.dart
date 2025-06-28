@@ -18,8 +18,7 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-   final apiBaseUrl = 'http://172.20.10.3:8000'; // hakas IP Address
-  // final apiBaseUrl = 'http://10.62.59.1:8000'; // hakas IP Address
+  final apiBaseUrl = 'http://172.20.10.3:8000'; // Replace with your API URL
 
   MyApp({Key? key}) : super(key: key);
 
