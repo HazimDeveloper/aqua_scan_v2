@@ -1,4 +1,4 @@
-// lib/services/api_service.dart - COMPLETE VERSION (Handle Any Distance)
+// lib/services/api_service.dart - COMPLETE IMPLEMENTATION with Low Confidence Handling
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as Math;
@@ -20,11 +20,17 @@ class WaterAnalysisResult {
   final WaterQualityState waterQuality;
   final String originalClass;
   final double confidence;
+  final bool waterDetected;
+  final String? errorMessage;
+  final bool isLowConfidence;
   
   WaterAnalysisResult({
     required this.waterQuality,
     required this.originalClass,
     required this.confidence,
+    this.waterDetected = true,
+    this.errorMessage,
+    this.isLowConfidence = false,
   });
 }
 
@@ -137,6 +143,170 @@ class ApiService {
       print('❌ Backend connection failed: $e');
       return false;
     }
+  }
+  
+  /// ENHANCED: Water quality analysis with proper low confidence handling
+  Future<WaterAnalysisResult> analyzeWaterQualityWithConfidence(File imageFile) async {
+    try {
+      print('🔬 Sending image for water quality analysis to $baseUrl/analyze');
+      
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/analyze'));
+      
+      final fileStream = http.ByteStream(imageFile.openRead());
+      final fileLength = await imageFile.length();
+      
+      final multipartFile = http.MultipartFile(
+        'image',
+        fileStream,
+        fileLength,
+        filename: 'water_image.jpg',
+      );
+      
+      request.files.add(multipartFile);
+      
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+      
+      print('📥 Backend response status: ${response.statusCode}');
+      print('📄 Backend response body: $responseBody');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(responseBody);
+        
+        print('🔍 Analyzing backend response...');
+        print('   success: ${data['success']}');
+        print('   water_detected: ${data['water_detected']}');
+        print('   confidence: ${data['confidence']}');
+        print('   low_confidence_result: ${data['low_confidence_result']}');
+        print('   water_quality_class: ${data['water_quality_class']}');
+        
+        // Initialize result variables
+        WaterQualityState qualityState = WaterQualityState.unknown;
+        double confidenceScore = 0.0;
+        String originalClass = "UNKNOWN";
+        bool waterDetected = false;
+        String? errorMessage;
+        bool isLowConfidence = false;
+        
+        // STEP 1: Check if water was detected
+        if (data.containsKey('water_detected')) {
+          waterDetected = data['water_detected'] == true;
+        }
+        
+        // STEP 2: Get confidence score
+        if (data.containsKey('confidence') && data['confidence'] != null) {
+          confidenceScore = double.tryParse(data['confidence'].toString()) ?? 0.0;
+        }
+        
+        // STEP 3: Get quality class if available
+        if (data.containsKey('water_quality_class') && data['water_quality_class'] != null) {
+          originalClass = data['water_quality_class'].toString();
+          qualityState = WaterQualityUtils.mapWaterQualityClass(originalClass);
+        }
+        
+        // STEP 4: Check if it's a low confidence result
+        if (data.containsKey('low_confidence_result')) {
+          isLowConfidence = data['low_confidence_result'] == true;
+        }
+        
+        // STEP 5: Get error/recommendation message
+        if (data.containsKey('message')) {
+          errorMessage = data['message'].toString();
+        }
+        
+        // STEP 6: Handle different response scenarios properly
+        if (!waterDetected) {
+          // CASE 1: NO WATER DETECTED
+          print('⚠️ No water detected in image');
+          
+          return WaterAnalysisResult(
+            waterQuality: WaterQualityState.unknown,
+            originalClass: "NO_WATER_DETECTED",
+            confidence: 0.0,
+            waterDetected: false,
+            errorMessage: errorMessage ?? 'No water detected in the image',
+            isLowConfidence: false,
+          );
+          
+        } else if (waterDetected && data['success'] == true) {
+          // CASE 2: HIGH CONFIDENCE SUCCESS
+          print('✅ Water detected and analyzed with high confidence');
+          
+          return WaterAnalysisResult(
+            waterQuality: qualityState,
+            originalClass: originalClass,
+            confidence: confidenceScore,
+            waterDetected: true,
+            isLowConfidence: false,
+          );
+          
+        } else if (waterDetected && isLowConfidence && qualityState != WaterQualityState.unknown) {
+          // CASE 3: LOW CONFIDENCE BUT VALID RESULTS (YOUR CASE!)
+          print('⚠️ Water detected with LOW CONFIDENCE but valid analysis');
+          print('   Quality: $qualityState ($originalClass)');
+          print('   Confidence: $confidenceScore%');
+          print('   This is a VALID result, just low confidence!');
+          
+          return WaterAnalysisResult(
+            waterQuality: qualityState,
+            originalClass: originalClass,
+            confidence: confidenceScore,
+            waterDetected: true,
+            isLowConfidence: true,
+            errorMessage: errorMessage,
+          );
+          
+        } else if (waterDetected && data['success'] == false) {
+          // CASE 4: WATER DETECTED BUT ANALYSIS FAILED
+          print('⚠️ Water detected but analysis failed or very low confidence');
+          
+          return WaterAnalysisResult(
+            waterQuality: qualityState,
+            originalClass: originalClass,
+            confidence: confidenceScore,
+            waterDetected: true,
+            errorMessage: errorMessage ?? 'Analysis failed with low confidence',
+            isLowConfidence: isLowConfidence,
+          );
+          
+        } else {
+          // CASE 5: UNEXPECTED RESPONSE FORMAT
+          print('❓ Unexpected response format');
+          
+          return WaterAnalysisResult(
+            waterQuality: WaterQualityState.unknown,
+            originalClass: "UNEXPECTED_RESPONSE",
+            confidence: 0.0,
+            waterDetected: false,
+            errorMessage: "Unexpected response format from server",
+            isLowConfidence: false,
+          );
+        }
+        
+      } else {
+        // HTTP ERROR CASE
+        print('❌ HTTP Error: ${response.statusCode}');
+        throw Exception('Server error (${response.statusCode}): $responseBody');
+      }
+      
+    } catch (e) {
+      print('❌ Error analyzing water quality: $e');
+      
+      return WaterAnalysisResult(
+        waterQuality: WaterQualityState.unknown,
+        originalClass: "ERROR",
+        confidence: 0.0,
+        waterDetected: false,
+        errorMessage: "Analysis error: ${e.toString()}",
+        isLowConfidence: false,
+      );
+    }
+  }
+  
+  /// Legacy method for compatibility
+  Future<WaterQualityState> analyzeWaterQuality(File imageFile) async {
+    final result = await analyzeWaterQualityWithConfidence(imageFile);
+    return result.waterQuality;
   }
   
   /// Get ALL water supply points from CSV - NO DISTANCE FILTER
@@ -626,81 +796,6 @@ class ApiService {
       '#FF6600', // Dark Orange
     ];
     return colors[index % colors.length];
-  }
-  
-  // Water quality analysis methods
-  Future<WaterAnalysisResult> analyzeWaterQualityWithConfidence(File imageFile) async {
-    try {
-      print('🔬 Sending image for water quality analysis to $baseUrl/analyze');
-      
-      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/analyze'));
-      
-      final fileStream = http.ByteStream(imageFile.openRead());
-      final fileLength = await imageFile.length();
-      
-      final multipartFile = http.MultipartFile(
-        'image',
-        fileStream,
-        fileLength,
-        filename: 'water_image.jpg',
-      );
-      
-      request.files.add(multipartFile);
-      
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(responseBody);
-        
-          print('🔬 Full backend response: $data');
-  print('🔬 Backend success: ${data['success']}');
-  print('🔬 Backend water_quality_class: ${data['water_quality_class']}');
-  print('🔬 Backend confidence: ${data['confidence']}');
-  
-        WaterQualityState qualityState = WaterQualityState.unknown;
-        double confidenceScore = 0.0;
-        String originalClass = "UNKNOWN";
-        
-        if (data['success'] == true) {
-          if (data.containsKey('confidence') && data['confidence'] != null) {
-            confidenceScore = double.tryParse(data['confidence'].toString()) ?? 0.0;
-          }
-          
-          if (data.containsKey('water_quality_class') && data['water_quality_class'] != null) {
-            originalClass = data['water_quality_class'].toString();
-            qualityState = WaterQualityUtils.mapWaterQualityClass(originalClass);
-          } 
-          else if (data.containsKey('water_quality_index')) {
-            final qualityIndex = int.tryParse(data['water_quality_index'].toString()) ?? 4;
-            if (qualityIndex >= 0 && qualityIndex < WaterQualityState.values.length) {
-              qualityState = WaterQualityState.values[qualityIndex];
-              originalClass = qualityState.toString().split('.').last.toUpperCase();
-            }
-          }
-        }
-        
-        return WaterAnalysisResult(
-          waterQuality: qualityState,
-          originalClass: originalClass,
-          confidence: confidenceScore,
-        );
-      } else {
-        throw Exception('Failed to analyze image: ${responseBody}');
-      }
-    } catch (e) {
-      print('❌ Error analyzing water quality: $e');
-      return WaterAnalysisResult(
-        waterQuality: WaterQualityState.unknown,
-        originalClass: "ERROR",
-        confidence: 0.0,
-      );
-    }
-  }
-  
-  Future<WaterQualityState> analyzeWaterQuality(File imageFile) async {
-    final result = await analyzeWaterQualityWithConfidence(imageFile);
-    return result.waterQuality;
   }
   
   // Legacy GA optimization methods for compatibility
