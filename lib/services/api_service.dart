@@ -1,4 +1,4 @@
-// lib/services/api_service.dart - ENHANCED: Google Maps API + Genetic Algorithm
+// lib/services/api_service.dart - COMPLETE VERSION with Enhanced Driving Mode
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as Math;
@@ -112,6 +112,42 @@ class RouteOptimizationRequest {
   }
 }
 
+// Driving Preferences Class
+class DrivingPreferences {
+  final bool avoidTolls;
+  final bool avoidHighways;
+  final bool avoidFerries;
+  final String optimizeFor; // 'time' or 'distance'
+  final bool useRealTimeTraffic;
+  final String units; // 'metric' or 'imperial'
+  final double fuelEfficiencyKmPerLiter;
+  final double fuelPricePerLiter;
+  
+  DrivingPreferences({
+    this.avoidTolls = false,
+    this.avoidHighways = false,
+    this.avoidFerries = true,
+    this.optimizeFor = 'time',
+    this.useRealTimeTraffic = true,
+    this.units = 'metric',
+    this.fuelEfficiencyKmPerLiter = 12.0,
+    this.fuelPricePerLiter = 2.50,
+  });
+  
+  Map<String, dynamic> toJson() {
+    return {
+      'avoid_tolls': avoidTolls,
+      'avoid_highways': avoidHighways,
+      'avoid_ferries': avoidFerries,
+      'optimize_for': optimizeFor,
+      'use_real_time_traffic': useRealTimeTraffic,
+      'units': units,
+      'fuel_efficiency': fuelEfficiencyKmPerLiter,
+      'fuel_price': fuelPricePerLiter,
+    };
+  }
+}
+
 class ApiService {
   final String baseUrl;
   
@@ -142,6 +178,7 @@ class ApiService {
         print('📊 Components: ${data['components']}');
         print('🧬 GA Support: ${data['genetic_algorithm_enabled'] ?? 'Unknown'}');
         print('🗺️ Maps Support: ${data['google_maps_enabled'] ?? 'Unknown'}');
+        print('🚗 Driving Support: ${data['driving_mode_enabled'] ?? 'Unknown'}');
         return true;
       }
       
@@ -252,19 +289,23 @@ class ApiService {
     }
   }
   
-  /// ENHANCED: Get water supply routes with Google Maps + Genetic Algorithm
+  /// ENHANCED: Get water supply routes with Google Maps + Genetic Algorithm + Driving Mode
   Future<Map<String, dynamic>> getOptimizedWaterSupplyRoutes(
     GeoPoint startLocation,
     String adminId, {
     int maxRoutes = 20,
     bool useGoogleMaps = true,
     bool useGeneticAlgorithm = true,
+    DrivingPreferences? drivingPrefs,
   }) async {
     try {
+      final preferences = drivingPrefs ?? DrivingPreferences();
+      
       print('🧬 Getting optimized water supply routes...');
       print('📍 Start: ${startLocation.latitude}, ${startLocation.longitude}');
       print('🗺️ Google Maps: $useGoogleMaps');
       print('🧬 Genetic Algorithm: $useGeneticAlgorithm');
+      print('🚗 Driving preferences: ${preferences.toJson()}');
       
       // Check backend connection
       final isConnected = await testBackendConnection();
@@ -272,7 +313,7 @@ class ApiService {
         throw Exception('Backend server not available');
       }
       
-      // STEP 1: Try enhanced optimization endpoint
+      // STEP 1: Try enhanced optimization endpoint with driving mode
       if (useGeneticAlgorithm) {
         try {
           final gaResult = await _getGeneticAlgorithmRoutes(
@@ -280,6 +321,7 @@ class ApiService {
             adminId, 
             maxRoutes: maxRoutes,
             useGoogleMaps: useGoogleMaps,
+            drivingPrefs: preferences,
           );
           
           if (gaResult['success'] == true && 
@@ -292,12 +334,13 @@ class ApiService {
         }
       }
       
-      // STEP 2: Fallback to Google Maps API directly
+      // STEP 2: Fallback to Google Maps API with driving mode
       if (useGoogleMaps) {
         try {
           final mapsResult = await _getGoogleMapsRoutes(
             startLocation, 
             maxRoutes: maxRoutes,
+            drivingPrefs: preferences,
           );
           
           if (mapsResult['success'] == true) {
@@ -311,7 +354,12 @@ class ApiService {
       
       // STEP 3: Fallback to basic calculation
       print('🔄 Using fallback calculation...');
-      return await _getBasicCalculatedRoutes(startLocation, adminId, maxRoutes: maxRoutes);
+      return await _getBasicCalculatedRoutes(
+        startLocation, 
+        adminId, 
+        maxRoutes: maxRoutes,
+        drivingPrefs: preferences,
+      );
       
     } catch (e) {
       print('❌ Route optimization failed: $e');
@@ -319,15 +367,16 @@ class ApiService {
     }
   }
   
-  /// Enhanced Genetic Algorithm route optimization
+  /// Enhanced Genetic Algorithm route optimization with driving mode
   Future<Map<String, dynamic>> _getGeneticAlgorithmRoutes(
     GeoPoint startLocation,
     String adminId, {
     int maxRoutes = 20,
     bool useGoogleMaps = true,
+    required DrivingPreferences drivingPrefs,
   }) async {
     try {
-      print('🧬 Starting Genetic Algorithm optimization...');
+      print('🧬 Starting Genetic Algorithm optimization with driving mode...');
       
       final gaParams = GAParameters(
         populationSize: Math.min(100, maxRoutes * 5),
@@ -343,18 +392,23 @@ class ApiService {
         currentLocation: startLocation,
         destinationKeyword: 'water_supply',
         maxRoutes: maxRoutes,
-        optimizationMethod: 'genetic_algorithm',
+        optimizationMethod: 'genetic_algorithm_driving',
         gaConfig: gaParams,
         useGoogleMaps: useGoogleMaps,
         googleMapsApiKey: useGoogleMaps ? _googleMapsApiKey : null,
       );
       
-      print('📝 GA Request: ${json.encode(request.toJson())}');
+      // Add driving preferences to the request
+      final enhancedRequest = request.toJson();
+      enhancedRequest['driving_preferences'] = drivingPrefs.toJson();
+      enhancedRequest['travel_mode'] = 'driving';
+      
+      print('📝 GA Request: ${json.encode(enhancedRequest)}');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/optimize-routes-genetic'),
+        Uri.parse('$baseUrl/optimize-routes-genetic-driving'),
         headers: _headers,
-        body: json.encode(request.toJson()),
+        body: json.encode(enhancedRequest),
       ).timeout(Duration(seconds: (gaParams.timeLimit + 15).round()));
       
       print('📥 GA Response status: ${response.statusCode}');
@@ -370,11 +424,15 @@ class ApiService {
           print('⏱️ GA runtime: ${data['optimization_time']}s');
           
           // Convert to standard format
-          final formattedRoutes = _formatGARoutesToStandard(optimizedRoutes, startLocation);
+          final formattedRoutes = _formatGARoutesToStandard(
+            optimizedRoutes, 
+            startLocation,
+            drivingPrefs: drivingPrefs,
+          );
           
           return {
             'success': true,
-            'method': 'genetic_algorithm',
+            'method': 'genetic_algorithm_driving',
             'polyline_routes': formattedRoutes,
             'optimization_stats': {
               'fitness_score': data['best_fitness'],
@@ -384,6 +442,7 @@ class ApiService {
             },
             'total_routes': formattedRoutes.length,
             'google_maps_used': useGoogleMaps,
+            'driving_preferences': drivingPrefs.toJson(),
           };
         }
       }
@@ -396,20 +455,24 @@ class ApiService {
     }
   }
   
-  /// Google Maps API integration
+  /// Google Maps API integration with enhanced driving mode
   Future<Map<String, dynamic>> _getGoogleMapsRoutes(
     GeoPoint startLocation, {
     int maxRoutes = 20,
+    required DrivingPreferences drivingPrefs,
   }) async {
     try {
-      print('🗺️ Getting routes via Google Maps API...');
+      print('🗺️ Getting routes via Google Maps API with driving mode...');
       
       if (_googleMapsApiKey == 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY') {
         throw Exception('Google Maps API key not configured');
       }
       
-      // STEP 1: Get nearby water supply places
-      final nearbyPlaces = await _findNearbyWaterSupplies(startLocation);
+      // STEP 1: Get nearby water supply places (car-accessible)
+      final nearbyPlaces = await _findNearbyWaterSupplies(
+        startLocation,
+        prioritizeAccessible: true,
+      );
       
       if (nearbyPlaces.isEmpty) {
         throw Exception('No water supply points found via Google Places');
@@ -417,7 +480,7 @@ class ApiService {
       
       print('📍 Found ${nearbyPlaces.length} water supply places');
       
-      // STEP 2: Get routes to each place
+      // STEP 2: Get driving routes to each place
       final routes = <Map<String, dynamic>>[];
       
       for (int i = 0; i < Math.min(maxRoutes, nearbyPlaces.length); i++) {
@@ -431,6 +494,7 @@ class ApiService {
               longitude: place['geometry']['location']['lng'],
             ),
             place,
+            drivingPrefs: drivingPrefs,
           );
           
           if (route != null) {
@@ -441,18 +505,24 @@ class ApiService {
         }
       }
       
-      // Sort routes by distance
-      routes.sort((a, b) => 
-        (a['distance_meters'] as int).compareTo(b['distance_meters'] as int));
+      // Sort routes based on optimization preference
+      if (drivingPrefs.optimizeFor == 'time') {
+        routes.sort((a, b) => 
+          (a['travel_time_seconds'] as int).compareTo(b['travel_time_seconds'] as int));
+      } else {
+        routes.sort((a, b) => 
+          (a['distance_meters'] as int).compareTo(b['distance_meters'] as int));
+      }
       
       print('✅ Google Maps returned ${routes.length} routes');
       
       return {
         'success': true,
-        'method': 'google_maps_api',
+        'method': 'google_maps_driving_api',
         'polyline_routes': routes,
         'total_routes': routes.length,
         'places_found': nearbyPlaces.length,
+        'driving_preferences': drivingPrefs.toJson(),
       };
       
     } catch (e) {
@@ -461,14 +531,19 @@ class ApiService {
     }
   }
   
-  /// Find nearby water supplies using Google Places API
-  Future<List<Map<String, dynamic>>> _findNearbyWaterSupplies(GeoPoint location) async {
+  /// Find nearby water supplies using Google Places API with driving filters
+  Future<List<Map<String, dynamic>>> _findNearbyWaterSupplies(
+    GeoPoint location, {
+    int radiusMeters = 50000,
+    bool prioritizeAccessible = true,
+  }) async {
     final queries = [
       'water supply',
       'water treatment plant',
-      'water distribution',
-      'water utility',
-      'water department',
+      'water distribution center',
+      'water utility company',
+      'municipal water department',
+      'water pumping station',
     ];
     
     final allPlaces = <Map<String, dynamic>>[];
@@ -478,9 +553,10 @@ class ApiService {
         final uri = Uri.parse('$_googleMapsBaseUrl/place/nearbysearch/json').replace(
           queryParameters: {
             'location': '${location.latitude},${location.longitude}',
-            'radius': '50000', // 50km radius
+            'radius': radiusMeters.toString(),
             'keyword': query,
             'key': _googleMapsApiKey,
+            'type': 'establishment',
           },
         );
         
@@ -491,7 +567,13 @@ class ApiService {
           
           if (data['status'] == 'OK') {
             final places = data['results'] as List<dynamic>;
-            allPlaces.addAll(places.cast<Map<String, dynamic>>());
+            
+            // Filter places that are accessible by car
+            for (final place in places) {
+              if (_isPlaceAccessibleByCar(place)) {
+                allPlaces.add(place);
+              }
+            }
           }
         }
       } catch (e) {
@@ -511,7 +593,7 @@ class ApiService {
     
     final result = uniquePlaces.values.toList();
     
-    // Calculate distances and sort
+    // Calculate distances and add driving metadata
     for (final place in result) {
       final lat = place['geometry']['location']['lat'] as double;
       final lng = place['geometry']['location']['lng'] as double;
@@ -522,29 +604,110 @@ class ApiService {
       );
       
       place['calculated_distance'] = distance;
+      place['accessible_by_car'] = _isPlaceAccessibleByCar(place);
+      place['has_parking'] = _placeHasParking(place);
     }
     
-    result.sort((a, b) => 
-      (a['calculated_distance'] as double).compareTo(b['calculated_distance'] as double));
+    // Sort by distance, prioritizing car-accessible places
+    result.sort((a, b) {
+      if (prioritizeAccessible) {
+        final aAccessible = a['accessible_by_car'] as bool? ?? false;
+        final bAccessible = b['accessible_by_car'] as bool? ?? false;
+        
+        if (aAccessible && !bAccessible) return -1;
+        if (!aAccessible && bAccessible) return 1;
+      }
+      
+      return (a['calculated_distance'] as double).compareTo(b['calculated_distance'] as double);
+    });
     
     return result;
   }
   
-  /// Get route using Google Directions API
+  /// Check if a place is accessible by car
+  bool _isPlaceAccessibleByCar(Map<String, dynamic> place) {
+    final types = place['types'] as List<dynamic>? ?? [];
+    final name = (place['name'] as String? ?? '').toLowerCase();
+    
+    // Exclude places that are typically not accessible by car
+    final inaccessibleTypes = [
+      'hiking_area',
+      'park',
+      'natural_feature',
+      'campground',
+      'trail',
+    ];
+    
+    final inaccessibleKeywords = [
+      'hiking',
+      'trail',
+      'mountain',
+      'forest',
+      'remote',
+      'foot access only',
+    ];
+    
+    // Check for inaccessible types
+    for (final type in inaccessibleTypes) {
+      if (types.contains(type)) return false;
+    }
+    
+    // Check for inaccessible keywords in name
+    for (final keyword in inaccessibleKeywords) {
+      if (name.contains(keyword)) return false;
+    }
+    
+    return true;
+  }
+  
+  /// Check if a place has parking information
+  bool _placeHasParking(Map<String, dynamic> place) {
+    final types = place['types'] as List<dynamic>? ?? [];
+    
+    // These types typically have parking
+    final parkingLikelyTypes = [
+      'establishment',
+      'point_of_interest',
+      'local_government_office',
+      'utility',
+    ];
+    
+    return parkingLikelyTypes.any((type) => types.contains(type));
+  }
+  
+  /// Get route using Google Directions API with enhanced driving mode
   Future<Map<String, dynamic>?> _getGoogleMapsRoute(
     GeoPoint start,
     GeoPoint end,
-    Map<String, dynamic> destinationPlace,
-  ) async {
+    Map<String, dynamic> destinationPlace, {
+    required DrivingPreferences drivingPrefs,
+  }) async {
     try {
+      print('🚗 Getting driving route from Google Maps API...');
+      
+      // Build avoid string
+      List<String> avoidOptions = [];
+      if (drivingPrefs.avoidTolls) avoidOptions.add('tolls');
+      if (drivingPrefs.avoidHighways) avoidOptions.add('highways');
+      if (drivingPrefs.avoidFerries) avoidOptions.add('ferries');
+      
+      final queryParams = {
+        'origin': '${start.latitude},${start.longitude}',
+        'destination': '${end.latitude},${end.longitude}',
+        'mode': 'driving', // DRIVING MODE
+        'alternatives': 'false',
+        'units': drivingPrefs.units,
+        'key': _googleMapsApiKey,
+        'departure_time': drivingPrefs.useRealTimeTraffic ? 'now' : '',
+      };
+      
+      // Add avoid parameters if any
+      if (avoidOptions.isNotEmpty) {
+        queryParams['avoid'] = avoidOptions.join('|');
+      }
+      
       final uri = Uri.parse('$_googleMapsBaseUrl/directions/json').replace(
-        queryParameters: {
-          'origin': '${start.latitude},${start.longitude}',
-          'destination': '${end.latitude},${end.longitude}',
-          'mode': 'driving',
-          'alternatives': 'false',
-          'key': _googleMapsApiKey,
-        },
+        queryParameters: queryParams,
       );
       
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
@@ -561,20 +724,34 @@ class ApiService {
           // Decode polyline
           final polylinePoints = _decodeGooglePolyline(route['overview_polyline']['points']);
           
+          // Calculate metrics
+          final distanceKm = (leg['distance']['value'] as int) / 1000.0;
+          final fuelCost = _calculateEstimatedFuelCost(
+            distanceKm,
+            drivingPrefs.fuelEfficiencyKmPerLiter,
+            drivingPrefs.fuelPricePerLiter,
+          );
+          
           return {
-            'route_id': 'gmap_${destinationPlace['place_id']}',
+            'route_id': 'gmap_driving_${destinationPlace['place_id']}',
             'destination_name': destinationPlace['name'],
             'destination_address': destinationPlace['vicinity'] ?? 'Unknown Address',
-            'distance': (leg['distance']['value'] as int) / 1000.0, // Convert to km
+            'distance': distanceKm,
             'distance_meters': leg['distance']['value'],
             'travel_time': leg['duration']['text'],
             'travel_time_seconds': leg['duration']['value'],
+            'travel_time_in_traffic': leg['duration_in_traffic']?['text'],
+            'travel_time_in_traffic_seconds': leg['duration_in_traffic']?['value'],
             'polyline_points': polylinePoints,
             'color': '#0066CC',
             'weight': 4,
             'opacity': 0.7,
             'is_shortest': false,
             'priority_rank': 1,
+            'driving_mode': 'driving',
+            'avoid_options': avoidOptions,
+            'optimization': drivingPrefs.optimizeFor,
+            'estimated_fuel_cost': fuelCost,
             'destination_details': {
               'id': destinationPlace['place_id'],
               'latitude': end.latitude,
@@ -584,11 +761,15 @@ class ApiService {
               'rating': destinationPlace['rating'],
               'place_id': destinationPlace['place_id'],
               'types': destinationPlace['types'],
+              'accessible_by_car': true,
+              'has_parking': _placeHasParking(destinationPlace),
             },
             'google_maps_data': {
               'route_summary': route['summary'],
               'warnings': route['warnings'],
               'copyrights': route['copyrights'],
+              'bounds': route['bounds'],
+              'fare': route['fare'],
             },
           };
         }
@@ -644,11 +825,12 @@ class ApiService {
     return points;
   }
   
-  /// Format GA results to standard format
+  /// Format GA results to standard format with driving preferences
   List<Map<String, dynamic>> _formatGARoutesToStandard(
     List<dynamic> gaRoutes,
-    GeoPoint startLocation,
-  ) {
+    GeoPoint startLocation, {
+    required DrivingPreferences drivingPrefs,
+  }) {
     final formattedRoutes = <Map<String, dynamic>>[];
     
     for (int i = 0; i < gaRoutes.length; i++) {
@@ -675,44 +857,58 @@ class ApiService {
       }
       
       final destination = waypoints.isNotEmpty ? waypoints.last : null;
+      final distanceKm = (route['total_distance'] as num?)?.toDouble() ?? 0.0;
       
       formattedRoutes.add({
-        'route_id': 'ga_route_$i',
+        'route_id': 'ga_driving_route_$i',
         'destination_name': destination?['name'] ?? 'Water Supply ${i + 1}',
-        'destination_address': destination?['address'] ?? 'GA Optimized Route',
-        'distance': (route['total_distance'] as num?)?.toDouble() ?? 0.0,
-        'travel_time': route['estimated_time'] ?? 'Unknown',
+        'destination_address': destination?['address'] ?? 'GA Optimized Driving Route',
+        'distance': distanceKm,
+        'travel_time': _calculateDrivingTime(
+          distanceKm,
+          considerTraffic: drivingPrefs.useRealTimeTraffic,
+        ),
         'polyline_points': polylinePoints,
-        'color': _getRouteColor(i),
+        'color': _getDrivingRouteColor(i),
         'weight': i == 0 ? 6 : 4,
         'opacity': i == 0 ? 0.9 : 0.7,
         'is_shortest': i == 0,
         'priority_rank': i + 1,
+        'driving_mode': 'driving',
+        'estimated_fuel_cost': _calculateEstimatedFuelCost(
+          distanceKm,
+          drivingPrefs.fuelEfficiencyKmPerLiter,
+          drivingPrefs.fuelPricePerLiter,
+        ),
         'destination_details': destination ?? {
-          'id': 'ga_dest_$i',
+          'id': 'ga_driving_dest_$i',
           'latitude': polylinePoints.last['latitude'],
           'longitude': polylinePoints.last['longitude'],
-          'name': 'GA Optimized Destination ${i + 1}',
+          'name': 'GA Optimized Driving Destination ${i + 1}',
+          'accessible_by_car': true,
         },
         'genetic_algorithm_data': {
           'fitness_score': route['fitness_score'],
           'generation_found': route['generation_found'],
           'waypoint_count': waypoints.length,
+          'optimization_method': 'driving_focused',
         },
+        'driving_preferences': drivingPrefs.toJson(),
       });
     }
     
     return formattedRoutes;
   }
   
-  /// Fallback basic calculation method
+  /// Fallback basic calculation method with driving considerations
   Future<Map<String, dynamic>> _getBasicCalculatedRoutes(
     GeoPoint startLocation,
     String adminId, {
     int maxRoutes = 20,
+    required DrivingPreferences drivingPrefs,
   }) async {
     try {
-      print('🧮 Using basic calculation fallback...');
+      print('🧮 Using basic calculation fallback with driving mode...');
       
       // Get CSV data
       final csvData = await getAllWaterSupplyPointsFromCSV();
@@ -737,48 +933,65 @@ class ApiService {
           );
           
           routes.add({
-            'route_id': 'basic_route_$i',
+            'route_id': 'basic_driving_route_$i',
             'destination_name': point['street_name'] ?? 'Water Supply ${i + 1}',
             'destination_address': point['address'] ?? 'Unknown Address',
             'distance': distance,
-            'travel_time': _calculateTravelTime(distance),
+            'travel_time': _calculateDrivingTime(
+              distance,
+              considerTraffic: drivingPrefs.useRealTimeTraffic,
+            ),
             'polyline_points': _generateSimplePolyline(startLocation, lat, lng),
-            'color': _getRouteColor(i),
+            'color': _getDrivingRouteColor(i),
             'weight': 4,
             'opacity': 0.7,
             'is_shortest': false,
             'priority_rank': i + 1,
+            'driving_mode': 'driving',
+            'estimated_fuel_cost': _calculateEstimatedFuelCost(
+              distance,
+              drivingPrefs.fuelEfficiencyKmPerLiter,
+              drivingPrefs.fuelPricePerLiter,
+            ),
             'destination_details': {
-              'id': point['id'] ?? 'basic_dest_$i',
+              'id': point['id'] ?? 'basic_driving_dest_$i',
               'latitude': lat,
               'longitude': lng,
               'street_name': point['street_name'],
               'address': point['address'],
+              'accessible_by_car': true,
             },
+            'driving_preferences': drivingPrefs.toJson(),
           });
         }
       }
       
-      // Sort by distance
-      routes.sort((a, b) => 
-        (a['distance'] as double).compareTo(b['distance'] as double));
+      // Sort routes based on preference
+      if (drivingPrefs.optimizeFor == 'time') {
+        routes.sort((a, b) => 
+          _parseTimeToMinutes(a['travel_time']).compareTo(_parseTimeToMinutes(b['travel_time'])));
+      } else {
+        routes.sort((a, b) => 
+          (a['distance'] as double).compareTo(b['distance'] as double));
+      }
       
-      // Mark shortest route
+      // Mark best route
       if (routes.isNotEmpty) {
         routes[0]['is_shortest'] = true;
-        routes[0]['color'] = '#FF0000';
+        routes[0]['color'] = drivingPrefs.optimizeFor == 'time' ? '#2E7D32' : '#1976D2';
       }
       
       return {
         'success': true,
-        'method': 'basic_calculation',
+        'method': 'basic_driving_calculation',
         'polyline_routes': routes,
         'total_routes': routes.length,
+        'driving_preferences': drivingPrefs.toJson(),
       };
       
     } catch (e) {
-      print('❌ Basic calculation failed: $e');
-      throw Exception('All route calculation methods failed: $e');
+      print('❌ Basic driving calculation failed: $e');
+      throw Exception('All driving route calculation methods failed: $e');
     }
   }
   
@@ -842,6 +1055,72 @@ class ApiService {
     }
   }
   
+  /// Calculate estimated fuel cost for driving
+  double _calculateEstimatedFuelCost(
+    double distanceKm,
+    double fuelEfficiencyKmPerLiter,
+    double fuelPricePerLiter,
+  ) {
+    final litersNeeded = distanceKm / fuelEfficiencyKmPerLiter;
+    return litersNeeded * fuelPricePerLiter;
+  }
+  
+  /// Calculate driving time with traffic considerations
+  String _calculateDrivingTime(
+    double distanceKm, {
+    bool considerTraffic = true,
+    double baseSpeedKmh = 60.0,
+  }) {
+    double effectiveSpeed = baseSpeedKmh;
+    
+    if (considerTraffic) {
+      final currentHour = DateTime.now().hour;
+      
+      // Adjust speed based on typical traffic patterns
+      if (currentHour >= 7 && currentHour <= 9) {
+        // Morning rush hour
+        effectiveSpeed = baseSpeedKmh * 0.6; // 40% slower
+      } else if (currentHour >= 17 && currentHour <= 19) {
+        // Evening rush hour
+        effectiveSpeed = baseSpeedKmh * 0.65; // 35% slower
+      } else if (currentHour >= 12 && currentHour <= 14) {
+        // Lunch time
+        effectiveSpeed = baseSpeedKmh * 0.8; // 20% slower
+      } else if (currentHour >= 22 || currentHour <= 6) {
+        // Night time - potentially faster
+        effectiveSpeed = baseSpeedKmh * 1.1; // 10% faster
+      }
+    }
+    
+    final timeHours = distanceKm / effectiveSpeed;
+    
+    if (timeHours < 1) {
+      return '${(timeHours * 60).round()} min';
+    } else {
+      final hours = timeHours.floor();
+      final minutes = ((timeHours - hours) * 60).round();
+      return minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
+    }
+  }
+  
+  /// Parse time string to minutes
+  int _parseTimeToMinutes(String timeStr) {
+    final parts = timeStr.toLowerCase().split(' ');
+    int totalMinutes = 0;
+    
+    for (int i = 0; i < parts.length; i++) {
+      if (parts[i].contains('h')) {
+        final hours = int.tryParse(parts[i].replaceAll('h', '')) ?? 0;
+        totalMinutes += hours * 60;
+      } else if (parts[i].contains('m')) {
+        final minutes = int.tryParse(parts[i].replaceAll('m', '').replaceAll('in', '')) ?? 0;
+        totalMinutes += minutes;
+      }
+    }
+    
+    return totalMinutes;
+  }
+  
   /// Helper methods
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
     const double earthRadius = 6371; // km
@@ -862,32 +1141,18 @@ class ApiService {
     return degrees * (Math.pi / 180);
   }
   
-  String _calculateTravelTime(double distanceKm, {String mode = 'car'}) {
-    final speeds = {
-      'walking': 5.0,
-      'bicycle': 15.0,
-      'car': 60.0,
-      'public_transport': 40.0,
-    };
-    
-    final speed = speeds[mode] ?? speeds['car']!;
-    final timeHours = distanceKm / speed;
-    
-    if (timeHours < 1) {
-      return '${(timeHours * 60).round()} min';
-    } else {
-      final hours = timeHours.floor();
-      final minutes = ((timeHours - hours) * 60).round();
-      return minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
-    }
-  }
-  
-  String _getRouteColor(int index) {
-    final colors = [
-      '#FF0000', '#0066CC', '#00CC66', '#CC6600', '#6600CC',
-      '#CC0066', '#00CCCC', '#CCCC00', '#996633', '#FF6600',
+  String _getDrivingRouteColor(int index) {
+    final drivingColors = [
+      '#2E7D32', // Dark green for best route
+      '#1976D2', // Blue for good routes
+      '#F57C00', // Orange for alternative routes
+      '#D32F2F', // Red for longer routes
+      '#7B1FA2', // Purple
+      '#00796B', // Teal
+      '#5D4037', // Brown
+      '#616161', // Grey
     ];
-    return colors[index % colors.length];
+    return drivingColors[index % drivingColors.length];
   }
   
   /// Legacy compatibility methods
@@ -907,6 +1172,41 @@ class ApiService {
       maxRoutes: maxRoutes,
       useGoogleMaps: true,
       useGeneticAlgorithm: true,
+      drivingPrefs: DrivingPreferences(),
+    );
+  }
+  
+  /// Enhanced method with driving preferences
+  Future<Map<String, dynamic>> getOptimizedDrivingRoutes(
+    GeoPoint startLocation,
+    String adminId, {
+    int maxRoutes = 20,
+    bool avoidTolls = false,
+    bool avoidHighways = false,
+    bool avoidFerries = true,
+    String optimizeFor = 'time',
+    bool useRealTimeTraffic = true,
+    bool useGeneticAlgorithm = true,
+    double fuelEfficiencyKmPerLiter = 12.0,
+    double fuelPricePerLiter = 2.50,
+  }) async {
+    final drivingPrefs = DrivingPreferences(
+      avoidTolls: avoidTolls,
+      avoidHighways: avoidHighways,
+      avoidFerries: avoidFerries,
+      optimizeFor: optimizeFor,
+      useRealTimeTraffic: useRealTimeTraffic,
+      fuelEfficiencyKmPerLiter: fuelEfficiencyKmPerLiter,
+      fuelPricePerLiter: fuelPricePerLiter,
+    );
+    
+    return await getOptimizedWaterSupplyRoutes(
+      startLocation,
+      adminId,
+      maxRoutes: maxRoutes,
+      useGoogleMaps: true,
+      useGeneticAlgorithm: useGeneticAlgorithm,
+      drivingPrefs: drivingPrefs,
     );
   }
 }
