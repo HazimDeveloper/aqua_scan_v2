@@ -182,7 +182,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     try {
       print('🧬 Starting Genetic Algorithm optimization with driving mode...');
       
-      final apiService = ApiService(baseUrl: 'https://your-backend-url.com');
+      final apiService = ApiService(baseUrl: 'http://172.20.10.3:8000');
       
       final gaParams = widget.gaParameters ?? GAParameters(
         populationSize: 100,
@@ -203,7 +203,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         optimizationMethod: 'genetic_algorithm',
         gaConfig: gaParams,
         useGoogleMaps: true,
-        googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY', // Replace with actual key
+        googleMapsApiKey: 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY', // Replace with actual key
       );
       
       // ENHANCED: Include driving mode preferences in the optimization

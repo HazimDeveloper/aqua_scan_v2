@@ -10,7 +10,6 @@ import '../../services/api_service.dart';
 import '../../screens/simplified/role_selection_screen.dart';
 import '../../screens/simplified/simple_report_screen.dart';
 import '../../widgets/common/custom_loader.dart';
-import '../../widgets/simplified/openstreet_map_widget.dart';
 
 class SimpleAdminScreen extends StatefulWidget {
   const SimpleAdminScreen({Key? key}) : super(key: key);
