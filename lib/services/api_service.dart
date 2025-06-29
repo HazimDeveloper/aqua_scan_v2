@@ -152,7 +152,7 @@ class ApiService {
   final String baseUrl;
   
   // Google Maps API configuration
-  static const String _googleMapsApiKey = 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY'; // Replace with actual key
+  static const String _googleMapsApiKey = 'AIzaSyD9GGGxS8QE-pO8_3QY8YJNM1FqyY4fKgM';
   static const String _googleMapsBaseUrl = 'https://maps.googleapis.com/maps/api';
   
   ApiService({required this.baseUrl});
@@ -194,6 +194,52 @@ class ApiService {
     }
   }
   
+  // Add new method to get actual driving routes:
+Future<Map<String, dynamic>> getActualDrivingRoutes(
+  GeoPoint currentLocation,
+  String adminId, {
+  int maxRoutes = 20,
+}) async {
+  try {
+    print('🚗 Getting actual driving routes from backend...');
+    
+    final response = await http.get(
+      Uri.parse('$baseUrl/water-supply-points-with-routes').replace(
+        queryParameters: {
+          'current_lat': currentLocation.latitude.toString(),
+          'current_lng': currentLocation.longitude.toString(),
+          'api_key': _googleMapsApiKey,
+          'limit': maxRoutes.toString(),
+        },
+      ),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 30));
+    
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      
+      if (data['success'] == true) {
+        final routes = data['routes'] as List<dynamic>;
+        
+        print('✅ Got ${routes.length} actual driving routes');
+        
+        return {
+          'success': true,
+          'polyline_routes': routes,
+          'total_routes': routes.length,
+          'method': 'google_directions_api',
+        };
+      }
+    }
+    
+    throw Exception('Failed to get driving routes: ${response.body}');
+    
+  } catch (e) {
+    print('❌ Actual driving routes error: $e');
+    throw Exception('Failed to get actual driving routes: $e');
+  }
+}
+
   /// ENHANCED: Water quality analysis with robust error handling
   Future<WaterAnalysisResult> analyzeWaterQualityWithConfidence(File imageFile) async {
     try {
@@ -902,98 +948,169 @@ class ApiService {
   
   /// Fallback basic calculation method with driving considerations
   Future<Map<String, dynamic>> _getBasicCalculatedRoutes(
-    GeoPoint startLocation,
-    String adminId, {
-    int maxRoutes = 20,
-    required DrivingPreferences drivingPrefs,
-  }) async {
-    try {
-      print('🧮 Using basic calculation fallback with driving mode...');
-      
-      // Get CSV data
-      final csvData = await getAllWaterSupplyPointsFromCSV();
-      final points = csvData['points'] as List<dynamic>;
-      
-      if (points.isEmpty) {
-        throw Exception('No water supply points in CSV data');
-      }
-      
-      // Calculate distances and create routes
-      final routes = <Map<String, dynamic>>[];
-      
-      for (int i = 0; i < Math.min(maxRoutes, points.length); i++) {
-        final point = points[i];
-        final lat = (point['latitude'] as num?)?.toDouble();
-        final lng = (point['longitude'] as num?)?.toDouble();
-        
-        if (lat != null && lng != null) {
-          final distance = _calculateDistance(
-            startLocation.latitude, startLocation.longitude,
-            lat, lng,
-          );
-          
-          routes.add({
-            'route_id': 'basic_driving_route_$i',
-            'destination_name': point['street_name'] ?? 'Water Supply ${i + 1}',
-            'destination_address': point['address'] ?? 'Unknown Address',
-            'distance': distance,
-            'travel_time': _calculateDrivingTime(
-              distance,
-              considerTraffic: drivingPrefs.useRealTimeTraffic,
-            ),
-            'polyline_points': _generateSimplePolyline(startLocation, lat, lng),
-            'color': _getDrivingRouteColor(i),
-            'weight': 4,
-            'opacity': 0.7,
-            'is_shortest': false,
-            'priority_rank': i + 1,
-            'driving_mode': 'driving',
-            'estimated_fuel_cost': _calculateEstimatedFuelCost(
-              distance,
-              drivingPrefs.fuelEfficiencyKmPerLiter,
-              drivingPrefs.fuelPricePerLiter,
-            ),
-            'destination_details': {
-              'id': point['id'] ?? 'basic_driving_dest_$i',
-              'latitude': lat,
-              'longitude': lng,
-              'street_name': point['street_name'],
-              'address': point['address'],
-              'accessible_by_car': true,
-            },
-            'driving_preferences': drivingPrefs.toJson(),
-          });
-        }
-      }
-      
-      // Sort routes based on preference
-      if (drivingPrefs.optimizeFor == 'time') {
-        routes.sort((a, b) => 
-          _parseTimeToMinutes(a['travel_time']).compareTo(_parseTimeToMinutes(b['travel_time'])));
-      } else {
-        routes.sort((a, b) => 
-          (a['distance'] as double).compareTo(b['distance'] as double));
-      }
-      
-      // Mark best route
-      if (routes.isNotEmpty) {
-        routes[0]['is_shortest'] = true;
-        routes[0]['color'] = drivingPrefs.optimizeFor == 'time' ? '#2E7D32' : '#1976D2';
-      }
-      
-      return {
-        'success': true,
-        'method': 'basic_driving_calculation',
-        'polyline_routes': routes,
-        'total_routes': routes.length,
-        'driving_preferences': drivingPrefs.toJson(),
-      };
-      
-    } catch (e) {
-      print('❌ Basic driving calculation failed: $e');
-      throw Exception('All driving route calculation methods failed: $e');
+  GeoPoint startLocation,
+  String adminId, {
+  int maxRoutes = 20,
+  required DrivingPreferences drivingPrefs,
+}) async {
+  try {
+    print('🧮 Getting enhanced calculated routes with road simulation...');
+    
+    // Get CSV data
+    final csvData = await getAllWaterSupplyPointsFromCSV();
+    final points = csvData['points'] as List<dynamic>;
+    
+    if (points.isEmpty) {
+      throw Exception('No water supply points in CSV data');
     }
+    
+    // Calculate distances and create SIMULATED ROAD routes
+    final routes = <Map<String, dynamic>>[];
+    
+    for (int i = 0; i < Math.min(maxRoutes, points.length); i++) {
+      final point = points[i];
+      final lat = (point['latitude'] as num?)?.toDouble();
+      final lng = (point['longitude'] as num?)?.toDouble();
+      
+      if (lat != null && lng != null) {
+        final destinationLocation = GeoPoint(latitude: lat, longitude: lng);
+        
+        // Calculate straight-line distance
+        final straightDistance = _calculateDistance(
+          startLocation.latitude, 
+          startLocation.longitude,
+          lat, 
+          lng
+        );
+        
+        // ENHANCED: Simulate realistic road routes
+        final simulatedRoute = _simulateRoadRoute(
+          startLocation, 
+          destinationLocation,
+          straightDistance
+        );
+        
+        routes.add({
+          'route_id': 'enhanced_route_$i',
+          'destination_name': point['street_name'] ?? 'Water Supply ${i + 1}',
+          'destination_address': point['address'] ?? 'Unknown Address',
+          'distance': simulatedRoute['distance'],
+          'travel_time': simulatedRoute['travel_time'],
+          'polyline_points': simulatedRoute['polyline_points'], // ENHANCED POINTS
+          'color': i == 0 ? '#00FF00' : '#0066CC',
+          'weight': i == 0 ? 6 : 4,
+          'opacity': 0.8,
+          'is_shortest': i == 0,
+          'priority_rank': i + 1,
+          'destination_details': {
+            'id': 'csv_dest_$i',
+            'latitude': lat,
+            'longitude': lng,
+            'street_name': point['street_name'] ?? 'Water Supply ${i + 1}',
+            'address': point['address'] ?? 'Unknown Address',
+            'point_of_interest': point['point_of_interest'] ?? '',
+            'additional_info': point['additional_info'] ?? '',
+          },
+          'route_type': 'simulated_road_route',
+        });
+      }
+    }
+    
+    // Sort by distance
+    routes.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
+    
+    print('✅ Generated ${routes.length} enhanced simulated road routes');
+    
+    return {
+      'success': true,
+      'polyline_routes': routes,
+      'total_routes': routes.length,
+      'method': 'enhanced_simulation',
+    };
+    
+  } catch (e) {
+    print('❌ Enhanced calculation error: $e');
+    throw Exception('Enhanced route calculation failed: $e');
   }
+}
+
+Map<String, dynamic> _simulateRoadRoute(
+  GeoPoint start, 
+  GeoPoint end, 
+  double straightDistance
+) {
+  // Simulate realistic road route with waypoints
+  final polylinePoints = <Map<String, dynamic>>[];
+  
+  // Start point
+  polylinePoints.add({
+    'latitude': start.latitude,
+    'longitude': start.longitude,
+  });
+  
+  // Calculate intermediate points to simulate road curves
+  final numWaypoints = Math.max(3, (straightDistance * 2).round());
+  
+  for (int i = 1; i <= numWaypoints; i++) {
+    final progress = i / (numWaypoints + 1);
+    
+    // Linear interpolation with road-like curves
+    var lat = start.latitude + (end.latitude - start.latitude) * progress;
+    var lng = start.longitude + (end.longitude - start.longitude) * progress;
+    
+    // Add realistic road deviations
+    if (i > 1 && i < numWaypoints) {
+      // Simulate road curves and avoiding obstacles
+      final curveFactor = Math.sin(progress * Math.pi) * 0.001; // Small deviation
+      lat += curveFactor * (i % 2 == 0 ? 1 : -1);
+      lng += curveFactor * 0.5 * (i % 3 == 0 ? 1 : -1);
+      
+      // Simulate following major roads (rough approximation)
+      if (straightDistance > 5.0) {
+        // For longer distances, simulate highway-like routes
+        final roadOffset = 0.002 * Math.sin(progress * 2 * Math.pi);
+        lat += roadOffset;
+      }
+    }
+    
+    polylinePoints.add({
+      'latitude': lat,
+      'longitude': lng,
+    });
+  }
+  
+  // End point
+  polylinePoints.add({
+    'latitude': end.latitude,
+    'longitude': end.longitude,
+  });
+  
+  // Calculate realistic road distance (typically 1.2-1.5x straight distance)
+  final roadFactor = 1.3 + (straightDistance > 10 ? 0.1 : 0); // Longer routes have more curves
+  final roadDistance = straightDistance * roadFactor;
+  
+  // Calculate travel time (assuming average speed)
+  final averageSpeedKmh = straightDistance > 20 ? 60 : (straightDistance > 5 ? 40 : 25);
+  final travelTimeHours = roadDistance / averageSpeedKmh;
+  final travelTimeMinutes = (travelTimeHours * 60).round();
+  
+  String travelTimeText;
+  if (travelTimeMinutes >= 60) {
+    final hours = travelTimeMinutes ~/ 60;
+    final minutes = travelTimeMinutes % 60;
+    travelTimeText = '${hours}h ${minutes}m';
+  } else {
+    travelTimeText = '${travelTimeMinutes}m';
+  }
+  
+  return {
+    'distance': roadDistance,
+    'travel_time': travelTimeText,
+    'polyline_points': polylinePoints,
+    'simulation_method': 'road_curve_simulation',
+    'waypoints_count': polylinePoints.length,
+  };
+}
   
   /// Generate simple polyline between two points
   List<Map<String, dynamic>> _generateSimplePolyline(

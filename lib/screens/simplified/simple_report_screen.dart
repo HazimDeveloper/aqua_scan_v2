@@ -292,14 +292,11 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       print('   Quality: ${result.waterQuality}');
       print('   Confidence: ${result.confidence}%');
       print('   Low confidence: ${result.isLowConfidence}');
-      print('   Message: ${result.errorMessage}');
       
       setState(() {
         _waterDetected = result.waterDetected;
-        _detectedQuality = result.waterQuality;
         _confidence = result.confidence;
         _originalClass = result.originalClass;
-        _analysisMessage = result.errorMessage;
         _analysisCompleted = true;
         _isDetecting = false;
         _isLowConfidence = result.isLowConfidence;
@@ -335,24 +332,10 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       
     } else if (result.isLowConfidence) {
       // LOW CONFIDENCE BUT DETECTED
-      final qualityText = WaterQualityUtils.getWaterQualityText(result.waterQuality);
-      
-      _showMessage(
-        'Water detected! Quality: $qualityText\nLow confidence (${result.confidence?.toStringAsFixed(1)}%) - You can still submit this report.',
-        isError: false,
-        duration: 7,
-      );
+     
       
     } else if (result.confidence != null && result.confidence! > 0) {
-      // HIGH CONFIDENCE
-      final qualityText = WaterQualityUtils.getWaterQualityText(result.waterQuality);
-      String confidenceLevel = result.confidence! >= 80 ? "High" : (result.confidence! >= 60 ? "Good" : "Moderate");
-      
-      _showMessage(
-        'Water detected! Quality: $qualityText\n$confidenceLevel confidence (${result.confidence!.toStringAsFixed(1)}%)',
-        isError: false,
-        duration: 5,
-      );
+
       
     } else {
       // ANALYSIS FAILED BUT WATER DETECTED

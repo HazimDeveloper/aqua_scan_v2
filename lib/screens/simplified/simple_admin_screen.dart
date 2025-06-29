@@ -1,5 +1,4 @@
-// lib/screens/simplified/simple_admin_screen.dart - FIXED: Route Listing & Empty Reports Handling
-import 'package:aquascan_v2/widgets/admin/google_maps_widget.dart';
+// lib/screens/simplified/simple_admin_screen.dart - COMPLETE REAL ROUTES IMPLEMENTATION
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
@@ -9,7 +8,7 @@ import '../../services/location_service.dart';
 import '../../services/api_service.dart';
 import '../../screens/simplified/role_selection_screen.dart';
 import '../../screens/simplified/simple_report_screen.dart';
-import '../../widgets/common/custom_loader.dart';
+import '../../widgets/admin/google_maps_widget.dart';
 
 class SimpleAdminScreen extends StatefulWidget {
   const SimpleAdminScreen({Key? key}) : super(key: key);
@@ -40,6 +39,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
   bool _showRoutesList = false;
   int? _selectedRouteIndex;
   String _sortBy = 'distance'; // distance, name, time
+  String _routeMethod = 'enhanced_simulation'; // Track which method was used
   
   @override
   void initState() {
@@ -90,10 +90,10 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
       
       if (!isConnected) {
         setState(() {
-          _errorMessage = 'Backend server offline';
+          _errorMessage = 'Backend server offline - Using offline mode';
           _isLoading = false;
         });
-        return;
+        // Continue without backend for demo purposes
       }
       
       // Step 2: Get current location
@@ -115,8 +115,10 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
         _currentLocation = currentLocation;
       });
       
-      // Step 3: Load routes using genetic algorithm
-      await _loadOptimizedRoutes();
+      print('📍 Current location: ${currentLocation.latitude}, ${currentLocation.longitude}');
+      
+      // Step 3: Load optimized routes with real driving paths
+      await _loadRealDrivingRoutes();
       
       // Step 4: Load user reports (optional)
       await _loadUserReports();
@@ -132,8 +134,8 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     }
   }
   
-  // ENHANCED: Load routes using genetic algorithm optimization
-  Future<void> _loadOptimizedRoutes() async {
+  /// Load real driving routes with enhanced API service
+  Future<void> _loadRealDrivingRoutes() async {
     if (_currentLocation == null) return;
     
     setState(() {
@@ -141,19 +143,21 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     });
     
     try {
-      print('🧬 Loading optimized routes using genetic algorithm...');
+      print('🗺️ Loading REAL driving routes with curved paths...');
       
-      // Try to get optimized routes first
+      // Use enhanced API service to get real driving routes
       final result = await _apiService.getPolylineRoutesToWaterSupplies(
         _currentLocation!,
         'admin-dashboard',
-        maxRoutes: 50,
+        maxRoutes: 15, // Reasonable number for performance
       );
       
       final routes = result['polyline_routes'] as List<dynamic>;
+      final method = result['method'] as String? ?? 'unknown';
       
       setState(() {
         _allRoutes = routes.cast<Map<String, dynamic>>();
+        _routeMethod = method;
         _isLoadingRoutes = false;
         _isLoading = false;
       });
@@ -161,15 +165,33 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
       // Sort routes by distance (nearest first)
       _sortRoutes();
       
-      print('✅ Loaded ${routes.length} optimized routes');
+      print('✅ Loaded ${routes.length} REAL driving routes using method: $method');
+      
+      // Log route quality for debugging
+      _logRouteQuality();
       
     } catch (e) {
-      print('❌ Failed to load optimized routes: $e');
+      print('❌ Failed to load real driving routes: $e');
       setState(() {
         _errorMessage = 'Cannot load water supply routes: $e';
         _isLoadingRoutes = false;
         _isLoading = false;
       });
+    }
+  }
+  
+  /// Log route quality for debugging
+  void _logRouteQuality() {
+    for (int i = 0; i < _allRoutes.length && i < 3; i++) {
+      final route = _allRoutes[i];
+      final polylinePoints = route['polyline_points'] as List<dynamic>? ?? [];
+      
+      print('📊 Route ${i + 1} Quality:');
+      print('   Name: ${route['destination_name']}');
+      print('   Distance: ${route['distance']}km');
+      print('   Travel Time: ${route['travel_time']}');
+      print('   Waypoints: ${polylinePoints.length} points');
+      print('   Method: ${route['route_type'] ?? _routeMethod}');
     }
   }
   
@@ -194,7 +216,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     }
   }
   
-  // ENHANCED: Sort routes by different criteria
+  /// Sort routes by different criteria
   void _sortRoutes() {
     setState(() {
       switch (_sortBy) {
@@ -239,7 +261,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
         opacity: _fadeAnimation!,
         child: Stack(
           children: [
-            // MAIN MAP - Show water supplies always, reports if available
+            // MAIN MAP - Real driving routes with Google Maps
             _buildMainMapView(),
             
             // TOP STATUS BAR
@@ -248,7 +270,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
             // FLOATING ACTION BUTTONS
             _buildFloatingActions(),
             
-            // ROUTES LIST PANEL - NEW
+            // ROUTES LIST PANEL
             if (_showRoutesList && _allRoutes.isNotEmpty)
               _buildRoutesListPanel(),
             
@@ -279,17 +301,160 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
             children: [
               Icon(Icons.map_outlined, size: 80, color: Colors.grey.shade400),
               const SizedBox(height: 16),
-              Text('Loading Map...', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+              Text('Loading Google Maps...', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+              const SizedBox(height: 8),
+              Text('Getting your location...', style: TextStyle(color: Colors.grey.shade500)),
             ],
           ),
         ),
       );
     }
     
+    // MAIN FEATURE: Google Maps with real driving routes
     return GoogleMapsRouteWidget(
-      currentLocation: _currentLocation!,
-      polylineRoutes: _allRoutes,
-      reports: _userReports, // Added required 'reports' parameter
+      polylineRoutes: _allRoutes, // ← Real routes with curved polyline_points
+      reports: _userReports,
+      currentLocation: _currentLocation,
+      showMultipleRoutes: true,
+      enableGeneticAlgorithm: true,
+      onReportTap: (report) {
+        print('📍 Report tapped: ${report.title}');
+        _showReportDetails(report);
+      },
+      onRouteSelected: (index) {
+        setState(() {
+          _selectedRouteIndex = index;
+        });
+        print('🗺️ Route selected: $index');
+        
+        if (index < _allRoutes.length) {
+          final route = _allRoutes[index];
+          _showRouteDetails(route, index);
+        }
+      },
+      selectedRouteIndex: _selectedRouteIndex,
+    );
+  }
+  
+  void _showReportDetails(ReportModel report) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.report_problem, color: Colors.orange),
+            SizedBox(width: 8),
+            Text(report.title),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Description:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(report.description),
+            SizedBox(height: 12),
+            Text('Location:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(report.address),
+            SizedBox(height: 12),
+            Text('Water Quality:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(report.waterQuality.name),
+            SizedBox(height: 12),
+            Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(report.isResolved ? 'Resolved' : 'Pending'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+          if (!report.isResolved)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Navigate to route to this report
+                print('🚗 Navigate to report location');
+              },
+              child: Text('Navigate'),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  void _showRouteDetails(Map<String, dynamic> route, int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: index == 0 ? Colors.green : Colors.blue,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            SizedBox(width: 8),
+            Expanded(child: Text(route['destination_name'] ?? 'Water Supply')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildRouteDetailRow('📍 Address', route['destination_address'] ?? 'Unknown'),
+            _buildRouteDetailRow('📏 Distance', '${route['distance']?.toStringAsFixed(1) ?? '?'} km'),
+            _buildRouteDetailRow('⏱️ Travel Time', route['travel_time'] ?? 'Unknown'),
+            _buildRouteDetailRow('🚗 Route Type', route['route_type'] ?? _routeMethod),
+            _buildRouteDetailRow('🎯 Priority', index == 0 ? 'Nearest Route' : 'Alternative Route'),
+            
+            if (route['polyline_points'] != null) 
+              _buildRouteDetailRow('🗺️ Waypoints', '${(route['polyline_points'] as List).length} points'),
+            
+            if (route['estimated_fuel_cost'] != null)
+              _buildRouteDetailRow('⛽ Est. Fuel Cost', 'RM ${route['estimated_fuel_cost'].toStringAsFixed(2)}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              print('🚗 Starting navigation to: ${route['destination_name']}');
+              // Here you could integrate with external navigation apps
+            },
+            child: Text('Navigate'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildRouteDetailRow(String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(label, style: TextStyle(fontWeight: FontWeight.w500)),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
     );
   }
   
@@ -329,60 +494,51 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                   children: [
                     Icon(Icons.admin_panel_settings, color: Colors.white, size: 16),
                     SizedBox(width: 6),
-                    Text('ADMIN', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text('ADMIN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                   ],
                 ),
               ),
               
-              const SizedBox(width: 12),
+              Spacer(),
               
-              // ROUTE COUNT
+              // ROUTE METHOD INDICATOR
               if (_allRoutes.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.blue,
+                    color: _getMethodColor(_routeMethod).withOpacity(0.9),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.route, color: Colors.white, size: 12),
-                      SizedBox(width: 4),
-                      Text('${_allRoutes.length}', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ],
+                  child: Text(
+                    _getMethodDisplayName(_routeMethod),
+                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
                   ),
                 ),
               
-              // REPORTS COUNT
-              if (_userReports.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.report_problem, color: Colors.white, size: 12),
-                      SizedBox(width: 4),
-                      Text('${_userReports.length}', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+              SizedBox(width: 8),
+              
+              // CONNECTION STATUS
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _backendConnected ? Colors.green.withOpacity(0.9) : Colors.red.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-              
-              const Spacer(),
-              
-              // ACTION BUTTONS
-              Row(
-                children: [
-                  _buildTopActionButton(icon: Icons.refresh, onPressed: _initializeAdminDashboard),
-                  const SizedBox(width: 8),
-                  _buildTopActionButton(icon: Icons.logout, onPressed: _showRoleSwitchDialog),
-                ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _backendConnected ? Icons.cloud_done : Icons.cloud_off,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      _backendConnected ? 'ONLINE' : 'OFFLINE',
+                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -391,119 +547,141 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     );
   }
   
-  Widget _buildTopActionButton({required IconData icon, required VoidCallback onPressed}) {
-    return Material(
-      color: Colors.black.withOpacity(0.3),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, color: Colors.white, size: 20),
-        ),
-      ),
-    );
+  Color _getMethodColor(String method) {
+    switch (method) {
+      case 'google_maps_driving_api':
+        return Colors.green;
+      case 'genetic_algorithm_driving':
+        return Colors.purple;
+      case 'enhanced_simulation':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
+  }
+  
+  String _getMethodDisplayName(String method) {
+    switch (method) {
+      case 'google_maps_driving_api':
+        return 'GOOGLE MAPS';
+      case 'genetic_algorithm_driving':
+        return 'AI OPTIMIZED';
+      case 'enhanced_simulation':
+        return 'ENHANCED ROUTES';
+      default:
+        return 'BASIC';
+    }
   }
   
   Widget _buildFloatingActions() {
     return Positioned(
       bottom: 20,
-      left: 16,
+      right: 20,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ROUTES LIST TOGGLE
-          if (_allRoutes.isNotEmpty)
-            FloatingActionButton(
-              mini: true,
-              heroTag: "routes_list",
-              backgroundColor: _showRoutesList ? Colors.orange : Colors.white,
-              foregroundColor: _showRoutesList ? Colors.white : Colors.orange,
-              onPressed: () {
-                setState(() {
-                  _showRoutesList = !_showRoutesList;
-                });
-              },
-              child: Icon(Icons.list, size: 20),
+          // Refresh routes button
+          FloatingActionButton(
+            heroTag: "refresh",
+            onPressed: _isLoadingRoutes ? null : () async {
+              await _loadRealDrivingRoutes();
+            },
+            backgroundColor: Colors.blue,
+            child: _isLoadingRoutes 
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : Icon(Icons.refresh, color: Colors.white),
+            tooltip: 'Refresh Routes',
+          ),
+          
+          SizedBox(height: 12),
+          
+          // Toggle routes list
+          FloatingActionButton(
+            heroTag: "list",
+            onPressed: _allRoutes.isEmpty ? null : () {
+              setState(() {
+                _showRoutesList = !_showRoutesList;
+              });
+            },
+            backgroundColor: _showRoutesList ? Colors.orange : Colors.grey.shade600,
+            child: Icon(
+              _showRoutesList ? Icons.close : Icons.list,
+              color: Colors.white,
             ),
+            tooltip: 'Routes List',
+          ),
           
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           
-          // CREATE REPORT
-          FloatingActionButton.extended(
-            heroTag: "create_report",
-            onPressed: _backendConnected ? () {
+          // Add new report button
+          FloatingActionButton(
+            heroTag: "add_report",
+            onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => SimpleReportScreen(isAdmin: true)),
-              ).then((_) => _loadUserReports());
-            } : null,
-            backgroundColor: _backendConnected ? Colors.orange : Colors.grey,
-            foregroundColor: Colors.white,
-            icon: Icon(Icons.add_circle, size: 22),
-            label: Text('Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                MaterialPageRoute(
+                  builder: (context) => SimpleReportScreen(isAdmin: true),
+                ),
+              );
+            },
+            backgroundColor: Colors.green,
+            child: Icon(Icons.add_location, color: Colors.white),
+            tooltip: 'Add Report',
           ),
         ],
       ),
     );
   }
   
-  // NEW: Routes list panel with sorting
   Widget _buildRoutesListPanel() {
     return Positioned(
-      top: 100,
-      bottom: 100,
+      top: MediaQuery.of(context).padding.top + 60,
       right: 16,
-      child: Container(
-        width: 320,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
+      bottom: 100,
+      width: 300,
+      child: Card(
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Column(
           children: [
-            // Header with sorting options
+            // Header
             Container(
               padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.blue.shade50, Colors.blue.shade100.withOpacity(0.3)],
-                ),
+                color: Colors.blue.shade600,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.route, color: Colors.blue, size: 20),
+                      Icon(Icons.route, color: Colors.white, size: 20),
                       SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Water Supply Routes',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue.shade800),
-                        ),
+                      Text(
+                        'Driving Routes (${_allRoutes.length})',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                       ),
-                      GestureDetector(
-                        onTap: () => setState(() => _showRoutesList = false),
-                        child: Icon(Icons.close, size: 18, color: Colors.blue.shade600),
+                      Spacer(),
+                      IconButton(
+                        icon: Icon(Icons.close, color: Colors.white, size: 20),
+                        onPressed: () {
+                          setState(() {
+                            _showRoutesList = false;
+                          });
+                        },
                       ),
                     ],
                   ),
                   
-                  SizedBox(height: 12),
-                  
                   // Sort options
                   Row(
                     children: [
-                      Text('Sort by: ', style: TextStyle(fontSize: 12, color: Colors.blue.shade700)),
+                      Text('Sort by:', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12)),
+                      SizedBox(width: 8),
                       Expanded(
                         child: Row(
                           children: [
@@ -529,6 +707,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                 itemBuilder: (context, index) {
                   final route = _allRoutes[index];
                   final isSelected = _selectedRouteIndex == index;
+                  final isNearest = index == 0;
                   
                   return GestureDetector(
                     onTap: () {
@@ -540,10 +719,10 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                       margin: EdgeInsets.only(bottom: 8),
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isSelected ? Colors.blue.shade50 : Colors.grey.shade50,
+                        color: isSelected ? Colors.blue.shade50 : (isNearest ? Colors.green.shade50 : Colors.grey.shade50),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? Colors.blue : Colors.grey.shade300,
+                          color: isSelected ? Colors.blue : (isNearest ? Colors.green : Colors.grey.shade300),
                           width: isSelected ? 2 : 1,
                         ),
                       ),
@@ -557,8 +736,8 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                                 width: 24,
                                 height: 24,
                                 decoration: BoxDecoration(
-                                  color: index == 0 ? Colors.green : (index < 3 ? Colors.blue : Colors.orange),
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: isNearest ? Colors.green : (index < 3 ? Colors.orange : Colors.blue),
+                                  shape: BoxShape.circle,
                                 ),
                                 child: Center(
                                   child: Text(
@@ -571,16 +750,12 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                               Expanded(
                                 child: Text(
                                   route['destination_name'] ?? 'Water Supply ${index + 1}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: isSelected ? Colors.blue.shade800 : Colors.black87,
-                                  ),
-                                  maxLines: 1,
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (index == 0)
+                              if (isNearest)
                                 Icon(Icons.star, color: Colors.amber, size: 16),
                             ],
                           ),
@@ -593,40 +768,55 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                               Icon(Icons.straighten, size: 14, color: Colors.grey.shade600),
                               SizedBox(width: 4),
                               Text(
-                                '${(route['distance'] as double?)?.toStringAsFixed(1) ?? '?'} km',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                '${route['distance']?.toStringAsFixed(1) ?? '?'} km',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                               SizedBox(width: 12),
                               Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
                               SizedBox(width: 4),
                               Text(
-                                route['travel_time']?.toString() ?? '?',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                route['travel_time'] ?? '?',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
                           
-                          if (isSelected) ...[
-                            SizedBox(height: 8),
-                            Container(
-                              padding: EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Address:',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
-                                  ),
-                                  Text(
-                                    route['destination_address'] ?? 'Address not available',
-                                    style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+                          if (route['destination_address'] != null) ...[
+                            SizedBox(height: 6),
+                            Text(
+                              route['destination_address'],
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          
+                          // Route quality indicator
+                          if (route['polyline_points'] != null) ...[
+                            SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.timeline, size: 12, color: Colors.blue),
+                                SizedBox(width: 4),
+                                Text(
+                                  '${(route['polyline_points'] as List).length} waypoints',
+                                  style: TextStyle(fontSize: 10, color: Colors.blue),
+                                ),
+                                if (isNearest) ...[
+                                  Spacer(),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      'NEAREST',
+                                      style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                    ),
                                   ),
                                 ],
-                              ),
+                              ],
                             ),
                           ],
                         ],
@@ -642,29 +832,28 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     );
   }
   
-  Widget _buildSortButton(String sortKey, String label) {
-    final isSelected = _sortBy == sortKey;
-    
+  Widget _buildSortButton(String sortType, String label) {
+    final isSelected = _sortBy == sortType;
     return GestureDetector(
       onTap: () {
         setState(() {
-          _sortBy = sortKey;
+          _sortBy = sortType;
         });
         _sortRoutes();
       },
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.shade300),
+          color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.white.withOpacity(0.3)),
         ),
         child: Text(
           label,
           style: TextStyle(
+            color: Colors.white,
             fontSize: 10,
-            color: isSelected ? Colors.white : Colors.blue.shade700,
-            fontWeight: FontWeight.w600,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ),
@@ -673,28 +862,24 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
   
   Widget _buildLoadingOverlay() {
     return Container(
-      color: Colors.black.withOpacity(0.7),
+      color: Colors.black26,
       child: Center(
-        child: Container(
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: Offset(0, 10))],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              WaterDropLoader(message: 'Loading Admin Dashboard...'),
-              const SizedBox(height: 20),
-              Text(
-                _isLoadingRoutes 
-                    ? 'Optimizing water supply routes using genetic algorithm...'
-                    : 'Initializing admin dashboard...',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-            ],
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.blue)),
+                SizedBox(height: 16),
+                Text('Loading Real Driving Routes...'),
+                SizedBox(height: 8),
+                Text(
+                  'Getting curved paths to water facilities',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -702,47 +887,55 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
   }
   
   Widget _buildErrorOverlay() {
-    return Container(
-      color: Colors.black.withOpacity(0.8),
-      child: Center(
-        child: Container(
-          margin: const EdgeInsets.all(32),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: Offset(0, 10))],
-          ),
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 80,
+      left: 16,
+      right: 16,
+      child: Card(
+        color: Colors.red.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              Text('Dashboard Error', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red)),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-                child: Text(_errorMessage!, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700, height: 1.4)),
-              ),
-              const SizedBox(height: 20),
               Row(
                 children: [
+                  Icon(Icons.error_outline, color: Colors.red),
+                  SizedBox(width: 12),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const RoleSelectionScreen())),
-                      icon: Icon(Icons.arrow_back),
-                      label: Text('Go Back'),
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.red.shade700),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _initializeAdminDashboard,
-                      icon: Icon(Icons.refresh),
-                      label: Text('Retry'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                    ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.red),
+                    onPressed: () {
+                      setState(() {
+                        _errorMessage = null;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  TextButton(
+                    onPressed: () async {
+                      await _loadRealDrivingRoutes();
+                    },
+                    child: Text('Retry'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => RoleSelectionScreen()),
+                      );
+                    },
+                    child: Text('Back to Menu'),
                   ),
                 ],
               ),
@@ -750,42 +943,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
           ),
         ),
       ),
-    );
-  }
-  
-  void _showRoleSwitchDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.swap_horiz, color: Colors.orange),
-              const SizedBox(width: 8),
-              const Text('Switch Role'),
-            ],
-          ),
-          content: const Text('Are you sure you want to leave the admin dashboard?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-              child: const Text('Switch Role'),
-            ),
-          ],
-        );
-      },
     );
   }
 }
