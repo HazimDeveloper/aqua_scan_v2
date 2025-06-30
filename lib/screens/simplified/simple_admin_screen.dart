@@ -1,4 +1,4 @@
-// lib/screens/simplified/simple_admin_screen.dart - SIMPLE FIX ONLY
+// lib/screens/simplified/simple_admin_screen.dart - ENHANCED: Added User Reports View
 import 'package:aquascan_v2/widgets/admin/google_maps_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -40,9 +40,14 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
   
   // UI state
   bool _showRoutesList = false;
+  bool _showUserReports = true; // ADDED: Show user reports by default
   int? _selectedRouteIndex;
   String _sortBy = 'distance';
   String _routeMethod = 'basic_routes';
+  
+  // ADDED: Report management
+  ReportModel? _selectedReport;
+  bool _showReportDetails = false;
   
   @override
   void initState() {
@@ -119,13 +124,14 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
       
       print('📍 Current location: ${currentLocation.latitude}, ${currentLocation.longitude}');
       
-      // Step 3: Load simple routes - NO PROBLEMATIC ENDPOINTS
+      // Step 3: Load simple routes
       await _loadSimpleRoutes();
       
       // Step 4: Load user reports
       await _loadUserReports();
       
       print('✅ === ADMIN DASHBOARD READY ===');
+      print('📊 Routes: ${_allRoutes.length}, Reports: ${_userReports.length}');
       
     } catch (e) {
       print('❌ Admin dashboard initialization failed: $e');
@@ -136,31 +142,28 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     }
   }
   
-  /// SIMPLE FIX: Load routes using DIRECT COORDINATES only
   Future<void> _loadSimpleRoutes() async {
     if (_currentLocation == null) return;
     
     setState(() {
       _isLoadingRoutes = true;
-      _isLoading = false; // Make sure main loading is off
+      _isLoading = false;
     });
     
     try {
       print('🗺️ Loading simple routes using direct coordinates...');
       
-      // SKIP API SERVICE - DIRECT GET CSV DATA WITH GOOGLE DIRECTIONS
       final csvData = await _getCSVDataWithDirections();
       
-      if (mounted) { // Check if widget is still mounted
+      if (mounted) {
         setState(() {
           _allRoutes = csvData;
-          _routeMethod = 'mixed_sources'; // Will be updated in _getCSVDataWithDirections
+          _routeMethod = 'mixed_sources';
           _isLoadingRoutes = false;
-          _isLoading = false; // Ensure both loading states are off
+          _isLoading = false;
         });
         
         print('✅ Loaded ${_allRoutes.length} routes using direct coordinates');
-        print('🎯 UI State updated - loading should stop');
       }
       
     } catch (e) {
@@ -175,10 +178,8 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     }
   }
   
-  /// Get CSV data and create Google Directions routes directly
   Future<List<Map<String, dynamic>>> _getCSVDataWithDirections() async {
     try {
-      // Get CSV data from API service
       final csvResult = await _apiService.getAllWaterSupplyPointsFromCSV();
       final points = csvResult['points'] as List<dynamic>;
       
@@ -194,7 +195,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
         final lng = (point['longitude'] as num?)?.toDouble();
         
         if (lat != null && lng != null) {
-          // Calculate distance
           final distance = _calculateDistance(
             _currentLocation!.latitude,
             _currentLocation!.longitude,
@@ -202,7 +202,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
             lng,
           );
           
-          // Get Google Directions if backend connected, otherwise use enhanced polyline
           List<Map<String, dynamic>> polylinePoints;
           String travelTime;
           String routeSource;
@@ -251,7 +250,14 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
       // Sort by distance
       routes.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
       
-      // Update route method based on results
+      // Update shortest route flag after sorting
+      for (int i = 0; i < routes.length; i++) {
+        routes[i]['is_shortest'] = i == 0;
+        routes[i]['priority_rank'] = i + 1;
+        routes[i]['color'] = i == 0 ? '#00FF00' : '#0066CC';
+        routes[i]['weight'] = i == 0 ? 6 : 4;
+      }
+      
       if (googleSuccessCount > 0) {
         setState(() {
           _routeMethod = googleSuccessCount == routes.length ? 'google_directions' : 'mixed_sources';
@@ -274,7 +280,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     }
   }
   
-  /// Get Google Directions using DIRECT COORDINATES (not Places API)
   Future<Map<String, dynamic>> _getGoogleDirections(double destLat, double destLng) async {
     const apiKey = 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY';
     
@@ -300,7 +305,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
           final route = data['routes'][0];
           final leg = route['legs'][0];
           
-          // Decode polyline
           final polylinePoints = _decodePolyline(route['overview_polyline']['points']);
           
           print('✅ Google Directions success: ${polylinePoints.length} points');
@@ -312,17 +316,9 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
           };
         } else {
           print('❌ Google Directions error: ${data['status']} - ${data['error_message'] ?? 'No error message'}');
-          if (data['status'] == 'REQUEST_DENIED') {
-            print('🔑 API Key issue - check billing/permissions');
-          } else if (data['status'] == 'ZERO_RESULTS') {
-            print('🗺️ No route found between coordinates');
-          } else if (data['status'] == 'OVER_QUERY_LIMIT') {
-            print('⚠️ API quota exceeded');
-          }
         }
       } else {
         print('❌ HTTP Error: ${response.statusCode}');
-        print('❌ Response body: ${response.body}');
       }
     } catch (e) {
       print('❌ Google Directions exception: $e');
@@ -331,7 +327,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     throw Exception('Google Directions API failed');
   }
   
-  /// Decode Google polyline
   List<Map<String, dynamic>> _decodePolyline(String encoded) {
     List<Map<String, dynamic>> points = [];
     int index = 0, len = encoded.length;
@@ -366,17 +361,14 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     return points;
   }
   
-  /// Create enhanced polyline (fallback) - IMPROVED TO LOOK MORE REALISTIC
   List<Map<String, dynamic>> _createEnhancedPolyline(double destLat, double destLng, double distance) {
     final points = <Map<String, dynamic>>[];
     
-    // Start point
     points.add({
       'latitude': _currentLocation!.latitude,
       'longitude': _currentLocation!.longitude,
     });
     
-    // Calculate more realistic road path
     final numWaypoints = Math.max(5, Math.min(20, (distance * 3).round()));
     
     print('🛣️ Creating enhanced polyline with $numWaypoints waypoints for ${distance.toStringAsFixed(1)}km route');
@@ -384,33 +376,23 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     for (int i = 1; i <= numWaypoints; i++) {
       final progress = i / (numWaypoints + 1);
       
-      // Basic linear interpolation
       var lat = _currentLocation!.latitude + (destLat - _currentLocation!.latitude) * progress;
       var lng = _currentLocation!.longitude + (destLng - _currentLocation!.longitude) * progress;
       
-      // Add realistic road variations
       if (i > 1 && i < numWaypoints) {
-        // Main curve factor
         final mainCurve = Math.sin(progress * Math.pi) * 0.002;
-        
-        // Secondary variations for road following
         final roadVariation = Math.sin(progress * 4 * Math.pi) * 0.0005;
+        final distanceFactor = Math.min(1.0, distance / 10.0);
         
-        // Distance-based adjustments
-        final distanceFactor = Math.min(1.0, distance / 10.0); // Scale based on distance
-        
-        // Apply curves
         lat += (mainCurve + roadVariation) * distanceFactor * (i % 2 == 0 ? 1 : -1);
         lng += (mainCurve * 0.7 + roadVariation * 0.5) * distanceFactor * (i % 3 == 0 ? 1 : -1);
         
-        // For longer distances, add highway-like deviations
         if (distance > 5.0) {
           final highwayOffset = Math.sin(progress * 2 * Math.pi) * 0.003;
           lat += highwayOffset * 0.3;
           lng += highwayOffset * 0.2;
         }
         
-        // Add random small deviations to look more natural
         final randomFactor = 0.0003;
         lat += (Math.sin(i * 2.5) * randomFactor);
         lng += (Math.cos(i * 3.7) * randomFactor);
@@ -422,7 +404,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
       });
     }
     
-    // End point
     points.add({
       'latitude': destLat,
       'longitude': destLng,
@@ -433,59 +414,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     return points;
   }
   
-  /// SIMPLE FIX: Add waypoints to polyline to avoid straight lines
-  List<Map<String, dynamic>> _enhancePolylinePoints(List<dynamic> originalPoints) {
-    if (originalPoints.length < 2) return originalPoints.cast<Map<String, dynamic>>();
-    
-    final points = originalPoints.cast<Map<String, dynamic>>();
-    final enhancedPoints = <Map<String, dynamic>>[];
-    
-    // Add first point
-    enhancedPoints.add(points.first);
-    
-    // Add intermediate points between each pair to create curves
-    for (int i = 0; i < points.length - 1; i++) {
-      final start = points[i];
-      final end = points[i + 1];
-      
-      final startLat = start['latitude'] as double;
-      final startLng = start['longitude'] as double;
-      final endLat = end['latitude'] as double;
-      final endLng = end['longitude'] as double;
-      
-      // Calculate distance to determine number of waypoints
-      final distance = _calculateDistance(startLat, startLng, endLat, endLng);
-      final numWaypoints = Math.max(1, (distance * 2).round());
-      
-      // Add intermediate waypoints with slight curves
-      for (int j = 1; j <= numWaypoints; j++) {
-        final progress = j / (numWaypoints + 1);
-        
-        // Linear interpolation
-        var lat = startLat + (endLat - startLat) * progress;
-        var lng = startLng + (endLng - startLng) * progress;
-        
-        // Add slight curve to avoid straight line
-        final curveFactor = Math.sin(progress * Math.pi) * 0.0008; // Small curve
-        lat += curveFactor * (j % 2 == 0 ? 1 : -1);
-        lng += curveFactor * 0.5 * (j % 3 == 0 ? 1 : -1);
-        
-        enhancedPoints.add({
-          'latitude': lat,
-          'longitude': lng,
-        });
-      }
-      
-      // Add end point
-      enhancedPoints.add(end);
-    }
-    
-    return enhancedPoints;
-  }
-
-  /// Estimate travel time as a string based on distance (in km).
   String _estimateTravelTime(double distance) {
-    // Assume average speed of 50 km/h for estimation
     final avgSpeed = 50.0;
     final timeHours = distance / avgSpeed;
     final timeMinutes = (timeHours * 60).round();
@@ -493,7 +422,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
   }
   
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const double earthRadius = 6371; // km
+    const double earthRadius = 6371;
     
     final double dLat = _toRadians(lat2 - lat1);
     final double dLon = _toRadians(lon2 - lon1);
@@ -511,17 +440,32 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     return degrees * (Math.pi / 180);
   }
   
+  // ENHANCED: Load user reports with better error handling
   Future<void> _loadUserReports() async {
     try {
-      // Use stream method from DatabaseService
-      await for (final reports in _databaseService.getReports()) {
+      print('📋 Loading user reports...');
+      
+      final reports = await _databaseService.getUnresolvedReportsList();
+      
+      if (mounted) {
         setState(() {
           _userReports = reports;
         });
-        break; // Just get first result
+        
+        print('✅ Loaded ${_userReports.length} user reports');
+        for (int i = 0; i < _userReports.length; i++) {
+          final report = _userReports[i];
+          print('   ${i + 1}. ${report.title} by ${report.userName} (${report.waterQuality.name})');
+        }
       }
     } catch (e) {
       print('⚠️ Failed to load user reports: $e');
+      // Continue without reports
+      if (mounted) {
+        setState(() {
+          _userReports = [];
+        });
+      }
     }
   }
   
@@ -531,6 +475,16 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
       appBar: AppBar(
         title: Text('Admin Dashboard'),
         actions: [
+          // ADDED: Reports toggle
+          IconButton(
+            icon: Icon(_showUserReports ? Icons.report : Icons.report_outlined),
+            onPressed: () {
+              setState(() {
+                _showUserReports = !_showUserReports;
+              });
+            },
+            tooltip: _showUserReports ? 'Hide Reports' : 'Show Reports',
+          ),
           IconButton(
             icon: Icon(Icons.swap_horiz),
             onPressed: () {
@@ -551,40 +505,74 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
               child: GoogleMapsRouteWidget(
                 currentLocation: _currentLocation,
                 polylineRoutes: _allRoutes,
-                reports: _userReports,
+                reports: _userReports, // ADDED: Pass user reports to map
                 selectedRouteIndex: _selectedRouteIndex,
                 onRouteSelected: (index) {
                   setState(() {
                     _selectedRouteIndex = index;
+                    _selectedReport = null; // Clear report selection
+                    _showReportDetails = false;
+                  });
+                },
+                onReportTap: (report) { // ADDED: Handle report tap
+                  setState(() {
+                    _selectedReport = report;
+                    _selectedRouteIndex = null; // Clear route selection
+                    _showReportDetails = true;
                   });
                 },
               ),
             ),
 
-          // Overlay UI elements
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              height: 200,  // Adjust this value as needed
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: Offset(0, -5),
+          // ENHANCED: Overlay UI elements with conditional visibility
+          if (_showUserReports && _userReports.isNotEmpty)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                height: _showReportDetails ? 300 : 200,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
                   ),
-                ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: _showReportDetails ? _buildReportDetails() : _buildReportsList(),
               ),
-              child: _buildRoutesList(),
+            )
+          else if (!_showUserReports && _allRoutes.isNotEmpty)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: _buildRoutesList(),
+              ),
             ),
-          ),
 
           // Loading indicator
           if (_isLoading)
@@ -599,222 +587,232 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     );
   }
   
-  Widget _buildLoadingView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: Colors.orange),
-          SizedBox(height: 16),
-          Text(
-            _isLoadingRoutes ? 'Loading Routes...' : 'Initializing Dashboard...',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Current location: ${_currentLocation?.latitude.toStringAsFixed(4) ?? "Unknown"}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-          ),
-          Text(
-            'Routes loaded: ${_allRoutes.length}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildErrorView() {
-    return Center(
-      child: Container(
-        margin: EdgeInsets.all(20),
-        padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.shade200),
-        ),
+  // ADDED: Build reports list
+  Widget _buildReportsList() {
+    if (_userReports.isEmpty) {
+      return Container(
+        padding: EdgeInsets.all(24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, color: Colors.red, size: 48),
+            Icon(Icons.report_outlined, size: 48, color: Colors.grey.shade400),
             SizedBox(height: 16),
             Text(
-              'Route Optimization Error',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
+              'No User Reports',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
             ),
             SizedBox(height: 8),
             Text(
-              _errorMessage ?? 'Unknown error',
-              style: TextStyle(color: Colors.red.shade700),
+              'No water quality reports have been submitted by users yet.',
+              style: TextStyle(color: Colors.grey.shade500),
               textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _initializeAdminDashboard,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              child: Text('Retry', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
-      ),
-    );
-  }
-  
-  Widget _buildMainDashboard() {
-    return Row(
+      );
+    }
+    
+    return Column(
       children: [
-        // Maps area
-        Expanded(
-          flex: 3,
-          child: Container(
-            margin: EdgeInsets.all(8),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: GoogleMapsRouteWidget(
-                polylineRoutes: _allRoutes,
-                reports: _userReports,
-                currentLocation: _currentLocation,
-                onRouteSelected: (routeIndex) {
-                  setState(() {
-                    _selectedRouteIndex = _selectedRouteIndex == routeIndex ? null : routeIndex;
-                  });
-                },
-                selectedRouteIndex: _selectedRouteIndex,
-              ),
+        // Header
+        Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.report, color: Colors.white, size: 20),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'User Reports',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                    Text(
+                      '${_userReports.length} unresolved reports',
+                      style: TextStyle(color: Colors.orange.shade600, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              if (_showReportDetails)
+                IconButton(
+                  icon: Icon(Icons.close, color: Colors.orange.shade600),
+                  onPressed: () {
+                    setState(() {
+                      _showReportDetails = false;
+                      _selectedReport = null;
+                    });
+                  },
+                ),
+            ],
           ),
         ),
         
-        // Side panel
-        Container(
-          width: 400,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: Offset(-2, 0),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              _buildSidePanelHeader(),
-              Expanded(
-                child: _showRoutesList 
-                  ? _buildRoutesList()
-                  : _buildDashboardStats(),
-              ),
-            ],
+        // Reports list
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.all(8),
+            itemCount: _userReports.length,
+            itemBuilder: (context, index) {
+              final report = _userReports[index];
+              final isSelected = _selectedReport?.id == report.id;
+              
+              return Container(
+                margin: EdgeInsets.only(bottom: 8),
+                child: Card(
+                  elevation: isSelected ? 4 : 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: isSelected ? Colors.orange : Colors.transparent,
+                      width: isSelected ? 2 : 0,
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedReport = _selectedReport?.id == report.id ? null : report;
+                        _showReportDetails = _selectedReport != null;
+                        _selectedRouteIndex = null; // Clear route selection
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          // Quality indicator
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: _getWaterQualityColor(report.waterQuality),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.water_drop,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          
+                          SizedBox(width: 12),
+                          
+                          // Report info
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  report.title,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'By: ${report.userName}',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  report.waterQuality.name.toUpperCase(),
+                                  style: TextStyle(
+                                    color: _getWaterQualityColor(report.waterQuality),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          // Action buttons
+                          Column(
+                            children: [
+                              Icon(
+                                isSelected ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                color: Colors.grey.shade400,
+                              ),
+                              Text(
+                                '${index + 1}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
     );
   }
   
-  Widget _buildTopStatusBar() {
-    return Container(
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 8,
-        left: 16,
-        right: 16,
-        bottom: 8,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.black.withOpacity(0.7), Colors.transparent],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Row(
-          children: [
-            // ADMIN BADGE
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [Colors.orange, Colors.orange.shade600]),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 8, offset: Offset(0, 2))],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.admin_panel_settings, color: Colors.white, size: 16),
-                  SizedBox(width: 6),
-                  Text('ADMIN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                ],
-              ),
+  // ADDED: Build report details
+  Widget _buildReportDetails() {
+    if (_selectedReport == null) return _buildReportsList();
+    
+    return Column(
+      children: [
+        // Header with back button
+        Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
-            
-            Spacer(),
-            
-            // ROUTE METHOD INDICATOR
-            if (_allRoutes.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'ROUTE OPTIMIZATION',
-                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                ),
-              ),
-            
-            SizedBox(width: 8),
-            
-            // CONNECTION STATUS
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _backendConnected ? Colors.green.withOpacity(0.9) : Colors.red.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _backendConnected ? Icons.cloud_done : Icons.cloud_off,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    _backendConnected ? 'ONLINE' : 'OFFLINE',
-                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildSidePanelHeader() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        border: Border(bottom: BorderSide(color: Colors.orange.shade200)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          ),
+          child: Row(
             children: [
-              Icon(Icons.route, color: Colors.orange, size: 24),
-              SizedBox(width: 12),
+              IconButton(
+                icon: Icon(Icons.arrow_back, color: Colors.orange.shade600),
+                onPressed: () {
+                  setState(() {
+                    _showReportDetails = false;
+                    _selectedReport = null;
+                  });
+                },
+              ),
+              SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Route Optimization',
+                  'Report Details',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -822,27 +820,135 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                   ),
                 ),
               ),
-              Switch(
-                value: _showRoutesList,
-                onChanged: (value) {
-                  setState(() {
-                    _showRoutesList = value;
-                  });
-                },
-                activeColor: Colors.orange,
+              // Resolve button
+              ElevatedButton.icon(
+                onPressed: () => _resolveReport(_selectedReport!),
+                icon: Icon(Icons.check, size: 18),
+                label: Text('Resolve'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
               ),
             ],
           ),
-          SizedBox(height: 8),
+        ),
+        
+        // Report details content
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title and quality
+                Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: _getWaterQualityColor(_selectedReport!.waterQuality),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.water_drop,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _selectedReport!.title,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _getWaterQualityColor(_selectedReport!.waterQuality),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _selectedReport!.waterQuality.name.toUpperCase(),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                
+                SizedBox(height: 16),
+                
+                // Description
+                _buildDetailSection('Description', _selectedReport!.description),
+                
+                // Reporter info
+                _buildDetailSection('Reporter', _selectedReport!.userName),
+                
+                // Location
+                _buildDetailSection('Location', _selectedReport!.address),
+                
+                // Images count
+                if (_selectedReport!.imageUrls.isNotEmpty)
+                  _buildDetailSection('Images', '${_selectedReport!.imageUrls.length} photo(s) attached'),
+                
+                // Timestamps
+                _buildDetailSection(
+                  'Reported At', 
+                  '${_selectedReport!.createdAt.day}/${_selectedReport!.createdAt.month}/${_selectedReport!.createdAt.year} at ${_selectedReport!.createdAt.hour}:${_selectedReport!.createdAt.minute.toString().padLeft(2, '0')}'
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildDetailSection(String title, String content) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            '${_allRoutes.length} routes found',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            content,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.black87,
+            ),
           ),
         ],
       ),
     );
   }
   
+  // ENHANCED: Routes list (existing but improved)
   Widget _buildRoutesList() {
     if (_allRoutes.isEmpty) {
       return Center(
@@ -860,207 +966,313 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
       );
     }
     
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: _allRoutes.length,
-      itemBuilder: (context, index) {
-        final route = _allRoutes[index];
-        final isSelected = _selectedRouteIndex == index;
-        final isNearest = index == 0;
-        
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedRouteIndex = isSelected ? null : index;
-            });
-          },
-          child: Container(
-            margin: EdgeInsets.only(bottom: 8),
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.blue.shade50 : (isNearest ? Colors.green.shade50 : Colors.grey.shade50),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? Colors.blue : (isNearest ? Colors.green : Colors.grey.shade300),
-                width: isSelected ? 2 : 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: isNearest ? Colors.green : Colors.blue,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        route['destination_name'] ?? 'Water Supply ${index + 1}',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (isNearest)
-                      Icon(Icons.star, color: Colors.amber, size: 16),
-                  ],
-                ),
-                
-                SizedBox(height: 8),
-                
-                Row(
-                  children: [
-                    Icon(Icons.straighten, size: 14, color: Colors.grey.shade600),
-                    SizedBox(width: 4),
-                    Text(
-                      '${route['distance']?.toStringAsFixed(1) ?? '?'} km',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                    ),
-                    SizedBox(width: 16),
-                    Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
-                    SizedBox(width: 4),
-                    Text(
-                      route['travel_time'] ?? '? min',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
           ),
-        );
-      },
-    );
-  }
-  
-  Widget _buildDashboardStats() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildStatCard(
-            'Total Routes',
-            '${_allRoutes.length}',
-            Icons.route,
-            Colors.blue,
-          ),
-          SizedBox(height: 12),
-          _buildStatCard(
-            'Nearest Distance',
-            _allRoutes.isNotEmpty ? '${_allRoutes.first['distance']?.toStringAsFixed(1) ?? '?'} km' : 'N/A',
-            Icons.near_me,
-            Colors.green,
-          ),
-          SizedBox(height: 12),
-          _buildStatCard(
-            'Backend Status',
-            _backendConnected ? 'Online' : 'Offline',
-            _backendConnected ? Icons.cloud_done : Icons.cloud_off,
-            _backendConnected ? Colors.green : Colors.red,
-          ),
-          
-          Spacer(),
-          
-          Column(
+          child: Row(
             children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SimpleReportScreen(isAdmin: true),
-                    ),
-                  );
-                },
-                icon: Icon(Icons.add_circle, color: Colors.white),
-                label: Text('Create Report', style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  minimumSize: Size(double.infinity, 44),
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Icon(Icons.route, color: Colors.white, size: 20),
               ),
-              SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => RoleSelectionScreen()),
-                  );
-                },
-                icon: Icon(Icons.logout, color: Colors.grey.shade700),
-                label: Text('Switch Role', style: TextStyle(color: Colors.grey.shade700)),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: Size(double.infinity, 44),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Water Supply Routes',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                    Text(
+                      '${_allRoutes.length} routes found',
+                      style: TextStyle(color: Colors.blue.shade600, fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ],
-      ),
+        ),
+        
+        // Routes list
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.all(8),
+            itemCount: _allRoutes.length,
+            itemBuilder: (context, index) {
+              final route = _allRoutes[index];
+              final isSelected = _selectedRouteIndex == index;
+              final isShortest = route['is_shortest'] == true;
+              
+              return Container(
+                margin: EdgeInsets.only(bottom: 8),
+                child: Card(
+                  elevation: isSelected ? 4 : 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: isSelected ? Colors.blue : (isShortest ? Colors.green : Colors.transparent),
+                      width: isSelected ? 2 : (isShortest ? 1 : 0),
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedRouteIndex = _selectedRouteIndex == index ? null : index;
+                        _selectedReport = null; // Clear report selection
+                        _showReportDetails = false;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              // Rank badge with special styling for shortest
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: isShortest ? Colors.green : Colors.blue,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Center(
+                                  child: isShortest ? 
+                                    Icon(Icons.star, color: Colors.white, size: 14) :
+                                    Text(
+                                      '${index + 1}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                ),
+                              ),
+                              
+                              SizedBox(width: 8),
+                              
+                              // Special badges
+                              if (isShortest) ...[
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'SHORTEST',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                              ],
+                              
+                              if (isSelected) ...[
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'SELECTED',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              
+                              Spacer(),
+                              
+                              // Distance
+                              Text(
+                                '${route['distance']?.toStringAsFixed(1) ?? '?'} km',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: isShortest ? Colors.green : Colors.blue,
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          SizedBox(height: 8),
+                          
+                          // Destination name
+                          Text(
+                            route['destination_name'] ?? 'Water Supply ${index + 1}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          
+                          SizedBox(height: 4),
+                          
+                          // Travel time
+                          Row(
+                            children: [
+                              Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
+                              SizedBox(width: 4),
+                              Text(
+                                route['travel_time'] ?? '? min',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
   
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 24),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
-                ),
-              ],
-            ),
+  // ADDED: Resolve report function
+  Future<void> _resolveReport(ReportModel report) async {
+    try {
+      await _databaseService.resolveReport(report.id);
+      
+      // Remove from list
+      setState(() {
+        _userReports.removeWhere((r) => r.id == report.id);
+        _selectedReport = null;
+        _showReportDetails = false;
+      });
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Report resolved successfully!'),
+            ],
           ),
-        ],
-      ),
-    );
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+      
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Failed to resolve report: $e'),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+  }
+  
+  Color _getWaterQualityColor(WaterQualityState quality) {
+    switch (quality) {
+      case WaterQualityState.optimum:
+        return Colors.blue;
+      case WaterQualityState.lowTemp:
+        return Colors.green;
+      case WaterQualityState.highPh:
+      case WaterQualityState.lowPh:
+        return Colors.orange;
+      case WaterQualityState.highPhTemp:
+        return Colors.red;
+      case WaterQualityState.lowTempHighPh:
+        return Colors.purple;
+      case WaterQualityState.unknown:
+      default:
+        return Colors.grey;
+    }
   }
   
   Widget _buildFloatingActions() {
     return Positioned(
-      bottom: 20,
+      bottom: _showUserReports && _userReports.isNotEmpty ? 220 : 20,
       right: 20,
-      child:       FloatingActionButton(
-        onPressed: _isLoadingRoutes ? null : _loadSimpleRoutes,
-        child: _isLoadingRoutes 
-          ? SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-            )
-          : Icon(Icons.refresh),
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
+      child: Column(
+        children: [
+          // Refresh button
+          FloatingActionButton(
+            heroTag: "refresh",
+            onPressed: _isLoadingRoutes ? null : _loadSimpleRoutes,
+            child: _isLoadingRoutes 
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                )
+              : Icon(Icons.refresh),
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.white,
+          ),
+          
+          SizedBox(height: 12),
+          
+          // Add report button
+          FloatingActionButton(
+            heroTag: "add_report",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SimpleReportScreen(isAdmin: true),
+                ),
+              );
+            },
+            child: Icon(Icons.add),
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+          ),
+        ],
       ),
     );
   }

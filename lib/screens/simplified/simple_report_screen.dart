@@ -1,4 +1,4 @@
-// lib/screens/simplified/simple_report_screen.dart - FIXED: Better Threshold/Low Confidence Error Handling
+// lib/screens/simplified/simple_report_screen.dart — FIXED: Better Threshold/Low Confidence Error Handling
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -214,7 +214,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           _showMessage('Image processed and saved successfully!', isError: false);
           
           if (_imageFiles.length == 1) {
-            print('🔬 Auto-analyzing first image...');
+            print('🔬 Auto—analyzing first image...');
             await _detectWaterQuality(File(localPath));
           }
           
@@ -434,7 +434,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       final now = DateTime.now();
       final report = ReportModel(
         id: '',
-        userId: widget.isAdmin ? 'admin-test' : 'user-test',
+        userId: widget.isAdmin ? 'admin—test' : 'user—test',
         userName: _reporterNameController.text.trim(),
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
@@ -474,7 +474,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     
     if (_detectionError != null) {
       title = 'Submit Without Analysis?';
-      message = 'your report and input matter - the authorities will review your submission.';
+      message = 'your report and input matter — the authorities will review your submission.';
     } else if (!_waterDetected && _imageFiles.isNotEmpty) {
       title = 'No Water Detected';
       message = 'AI did not detect water in your images. Do you still want to submit this report?';
@@ -531,9 +531,9 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         baseMessage += '\nAnalysis included with ${_confidence!.toStringAsFixed(1)}% confidence.';
       }
     } else if (_analysisCompleted && !_waterDetected) {
-      baseMessage += '\nSubmitted without water detection - manual assessment included.';
+      baseMessage += '\nSubmitted without water detection — manual assessment included.';
     } else if (_detectionError != null) {
-      baseMessage += '\nSubmitted without AI analysis - manual assessment recorded.';
+      baseMessage += '\nSubmitted without AI analysis — manual assessment recorded.';
     }
     
     return baseMessage;
@@ -1052,7 +1052,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Your Report and Input Matter -The Authorities Will Review Your Submission',
+                        'Your Report and Input Matter —The Authorities Will Review Your Submission',
                         style: TextStyle(fontSize: 12, color: Colors.green.shade800, fontWeight: FontWeight.w500),
                       ),
                     ),
@@ -1323,7 +1323,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                       const Text('Admin Mode ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                       const SizedBox(height: 6),
                       Text(
-                        'Advanced water detection with comprehensive error recovery - all scenarios supported',
+                        'Advanced water detection — all scenarios supported',
                         style: TextStyle(color: Colors.orange.shade800, fontSize: 14, height: 1.3),
                       ),
                     ],

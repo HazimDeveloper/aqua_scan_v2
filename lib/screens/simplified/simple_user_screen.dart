@@ -153,7 +153,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                 
                 const SizedBox(height: 24),
                 
-                // Main Action - Report Issue
+                // Main Action — Report Issue
                 _buildMainActionSection(),
                 
                 const SizedBox(height: 24),
@@ -231,7 +231,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Spot . Report . Improve. - Empower Your Community and Support The Authorities ',
+                    'Spot . Report . Improve. — Empower Your Community and Support The Authorities ',
                     style: TextStyle(
                       color: Colors.blue.shade800,
                       fontSize: 14,
@@ -327,7 +327,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Notice Water Issue? - Together We Helps Authorities Safeguard Your Community',
+                    'Notice Water Issue? — Together We Helps Authorities Safeguard Your Community',
                     style: TextStyle(
                       color: AppTheme.textSecondaryColor,
                       fontSize: 14,

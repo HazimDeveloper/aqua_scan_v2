@@ -1,4 +1,4 @@
-// lib/widgets/admin/google_maps_route_widget.dart - COMPLETE SIMPLE VERSION
+// lib/widgets/admin/google_maps_widget.dart - ENHANCED: Reporter Locations + Conditional Current Location
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -38,12 +38,16 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   
   // Animation controllers
   late AnimationController _pulseController;
+  late AnimationController _reporterPulseController; // ADDED: For reporter markers
   late Animation<double> _pulseAnimation;
+  late Animation<double> _reporterPulseAnimation; // ADDED
   
   // UI State
   int? _selectedRouteIndex;
+  ReportModel? _selectedReport; // ADDED: Track selected report
   Map<String, dynamic>? _selectedRoute;
   bool _showRouteDetails = false;
+  bool _showReporterDetails = false; // ADDED
   double _currentZoom = 12.0;
   
   @override
@@ -58,7 +62,8 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   void didUpdateWidget(GoogleMapsRouteWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.polylineRoutes != widget.polylineRoutes ||
-        oldWidget.selectedRouteIndex != widget.selectedRouteIndex) {
+        oldWidget.selectedRouteIndex != widget.selectedRouteIndex ||
+        oldWidget.reports != widget.reports) { // ADDED: Check reports changes
       _selectedRouteIndex = widget.selectedRouteIndex;
       _updateMarkersAndPolylines();
     }
@@ -67,6 +72,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   @override
   void dispose() {
     _pulseController.dispose();
+    _reporterPulseController.dispose(); // ADDED
     super.dispose();
   }
   
@@ -76,8 +82,19 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       vsync: this,
     )..repeat(reverse: true);
     
+    // ADDED: Reporter markers animation
+    _reporterPulseController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+    
     _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    
+    // ADDED: Reporter pulse animation
+    _reporterPulseAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
+      CurvedAnimation(parent: _reporterPulseController, curve: Curves.easeInOut),
     );
   }
   
@@ -85,10 +102,10 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     final newMarkers = <Marker>{};
     final newPolylines = <Polyline>{};
     
-    print('🗺️ Updating map with ${widget.polylineRoutes?.length ?? 0} routes');
+    print('🗺️ Updating map with ${widget.polylineRoutes?.length ?? 0} routes and ${widget.reports.length} reports');
     
-    // Add current location marker
-    if (widget.currentLocation != null) {
+    // ENHANCED: Conditional current location marker - only show if no reports OR if admin needs reference point
+    if (widget.currentLocation != null && _shouldShowCurrentLocationMarker()) {
       newMarkers.add(_buildCurrentLocationMarker());
     }
     
@@ -111,9 +128,9 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       }
     }
     
-    // Add report markers
+    // ADDED: Add reporter markers
     for (final report in widget.reports) {
-      newMarkers.add(_buildReportMarker(report));
+      newMarkers.add(_buildReporterMarker(report));
     }
     
     if (mounted) {
@@ -122,8 +139,19 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         _polylines = newPolylines;
       });
       
-      print('✅ Map updated: ${_markers.length} markers, ${_polylines.length} polylines');
+      print('✅ Map updated: ${_markers.length} markers (${widget.reports.length} reporters), ${_polylines.length} polylines');
     }
+  }
+  
+  // ADDED: Determine if current location marker should be shown
+  bool _shouldShowCurrentLocationMarker() {
+    // Show current location if:
+    // 1. No reports exist (water supply network only)
+    // 2. Less than 3 reports (need reference point)
+    // 3. Map is zoomed out (provides context)
+    return widget.reports.isEmpty || 
+           widget.reports.length < 3 || 
+           _currentZoom < 13.0;
   }
   
   Marker _buildCurrentLocationMarker() {
@@ -134,9 +162,9 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         widget.currentLocation!.longitude,
       ),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      infoWindow: const InfoWindow(
-        title: '📍 Your Location',
-        snippet: 'Current GPS position',
+      infoWindow: InfoWindow(
+        title: '📍 Admin Location',
+        snippet: 'Current GPS position (${widget.reports.isEmpty ? "no reports" : "${widget.reports.length} reports"})',
       ),
     );
   }
@@ -151,19 +179,19 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     }
     
     final isSelected = _selectedRouteIndex == index;
-    final isNearest = index == 0;
+    final isShortest = route['is_shortest'] == true; // ENHANCED: Check shortest route flag
     
     return Marker(
       markerId: MarkerId('route_$index'),
       position: LatLng(lat, lng),
       icon: BitmapDescriptor.defaultMarkerWithHue(
-        isNearest ? BitmapDescriptor.hueGreen :
+        isShortest ? BitmapDescriptor.hueGreen : // ENHANCED: Green for shortest
         isSelected ? BitmapDescriptor.hueBlue :
         _getMarkerHue(index),
       ),
       infoWindow: InfoWindow(
-        title: route['destination_name'] ?? 'Water Supply ${index + 1}',
-        snippet: _buildRouteSnippet(route, index),
+        title: '${isShortest ? "🌟 " : ""}${route['destination_name'] ?? 'Water Supply ${index + 1}'}', // ENHANCED: Star for shortest
+        snippet: _buildRouteSnippet(route, index, isShortest),
       ),
       onTap: () {
         _onRouteMarkerTap(route, index);
@@ -171,15 +199,14 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     );
   }
   
-  String _buildRouteSnippet(Map<String, dynamic> route, int index) {
+  String _buildRouteSnippet(Map<String, dynamic> route, int index, bool isShortest) {
     final distance = '${(route['distance'] as num?)?.toStringAsFixed(1) ?? '?'}km';
     final time = route['travel_time'] ?? '? min';
-    final isNearest = index == 0;
     
     String snippet = '$distance • $time';
     
-    if (isNearest) {
-      snippet += ' • 🌟 NEAREST';
+    if (isShortest) {
+      snippet += ' • 🏆 SHORTEST ROUTE'; // ENHANCED: Better shortest route indicator
     }
     
     final routeSource = route['route_source'] as String?;
@@ -217,15 +244,16 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     }
     
     final isSelected = _selectedRouteIndex == index;
-    final isNearest = index == 0;
+    final isShortest = route['is_shortest'] == true; // ENHANCED
     
     Color routeColor;
     int strokeWidth;
     double opacity;
     
-    if (isNearest) {
+    if (isShortest) {
+      // ENHANCED: Special styling for shortest route
       routeColor = Colors.green;
-      strokeWidth = 7;
+      strokeWidth = 8;
       opacity = 0.9;
     } else if (isSelected) {
       routeColor = Colors.blue;
@@ -243,21 +271,66 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       color: routeColor.withOpacity(opacity),
       width: strokeWidth,
       geodesic: true,
-      patterns: isSelected ? [PatternItem.dash(10), PatternItem.gap(5)] : [],
+      patterns: isSelected ? [PatternItem.dash(10), PatternItem.gap(5)] : 
+               isShortest ? [PatternItem.dash(15), PatternItem.gap(8)] : [], // ENHANCED: Dashed pattern for shortest
     );
   }
   
-  Marker _buildReportMarker(ReportModel report) {
+  // ADDED: Build reporter marker
+  Marker _buildReporterMarker(ReportModel report) {
+    final isSelected = _selectedReport?.id == report.id;
+    
     return Marker(
-      markerId: MarkerId('report_${report.id}'),
+      markerId: MarkerId('reporter_${report.id}'),
       position: LatLng(report.location.latitude, report.location.longitude),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      icon: BitmapDescriptor.defaultMarkerWithHue(_getReporterMarkerHue(report.waterQuality)),
       infoWindow: InfoWindow(
         title: '📋 ${report.title}',
-        snippet: '${report.waterQuality.name} • ${report.address}',
+        snippet: 'By: ${report.userName} • ${_getWaterQualityDisplayName(report.waterQuality)}',
       ),
-      onTap: () => widget.onReportTap?.call(report),
+      onTap: () => _onReporterMarkerTap(report),
     );
+  }
+  
+  // ADDED: Get reporter marker color based on water quality
+  double _getReporterMarkerHue(WaterQualityState quality) {
+    switch (quality) {
+      case WaterQualityState.optimum:
+        return BitmapDescriptor.hueBlue;
+      case WaterQualityState.lowTemp:
+        return BitmapDescriptor.hueCyan;
+      case WaterQualityState.highPh:
+      case WaterQualityState.lowPh:
+        return BitmapDescriptor.hueOrange;
+      case WaterQualityState.highPhTemp:
+        return BitmapDescriptor.hueRed;
+      case WaterQualityState.lowTempHighPh:
+        return BitmapDescriptor.hueViolet;
+      case WaterQualityState.unknown:
+      default:
+        return BitmapDescriptor.hueYellow;
+    }
+  }
+  
+  // ADDED: Get user-friendly water quality name
+  String _getWaterQualityDisplayName(WaterQualityState quality) {
+    switch (quality) {
+      case WaterQualityState.optimum:
+        return 'Optimum Quality';
+      case WaterQualityState.highPh:
+        return 'High pH';
+      case WaterQualityState.lowPh:
+        return 'Low pH';
+      case WaterQualityState.highPhTemp:
+        return 'High pH & Temp';
+      case WaterQualityState.lowTemp:
+        return 'Low Temperature';
+      case WaterQualityState.lowTempHighPh:
+        return 'Low Temp & High pH';
+      case WaterQualityState.unknown:
+      default:
+        return 'Contaminated Water';
+    }
   }
   
   void _onRouteMarkerTap(Map<String, dynamic> route, int index) {
@@ -270,17 +343,38 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         _selectedRouteIndex = index;
         _selectedRoute = route;
         _showRouteDetails = true;
+        // Clear reporter selection
+        _selectedReport = null;
+        _showReporterDetails = false;
       }
     });
     
-    // Update polylines
     _updateMarkersAndPolylines();
+    widget.onRouteSelected?.call(_selectedRouteIndex ?? -1);
+    _zoomToRoute(route);
+  }
+  
+  // ADDED: Handle reporter marker tap
+  void _onReporterMarkerTap(ReportModel report) {
+    setState(() {
+      if (_selectedReport?.id == report.id) {
+        _selectedReport = null;
+        _showReporterDetails = false;
+      } else {
+        _selectedReport = report;
+        _showReporterDetails = true;
+        // Clear route selection
+        _selectedRouteIndex = null;
+        _selectedRoute = null;
+        _showRouteDetails = false;
+      }
+    });
     
     // Notify parent
-    widget.onRouteSelected?.call(_selectedRouteIndex ?? -1);
+    widget.onReportTap?.call(report);
     
-    // Zoom to route
-    _zoomToRoute(route);
+    // Zoom to report location
+    _zoomToLocation(LatLng(report.location.latitude, report.location.longitude));
   }
   
   void _zoomToRoute(Map<String, dynamic> route) {
@@ -320,45 +414,72 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     }
   }
   
+  // ADDED: Zoom to specific location
+  void _zoomToLocation(LatLng location) {
+    if (_mapController == null) return;
+    
+    _mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: location,
+          zoom: 16.0,
+        ),
+      ),
+    );
+  }
+  
   void _fitAllRoutes() {
-    if (_mapController == null || widget.polylineRoutes == null || widget.polylineRoutes!.isEmpty) {
-      return;
-    }
+    if (_mapController == null) return;
     
     double minLat = double.infinity;
     double maxLat = -double.infinity;
     double minLng = double.infinity;
     double maxLng = -double.infinity;
     
-    // Include current location
-    if (widget.currentLocation != null) {
+    bool hasValidCoordinates = false;
+    
+    // Include current location if shown
+    if (widget.currentLocation != null && _shouldShowCurrentLocationMarker()) {
       minLat = math.min(minLat, widget.currentLocation!.latitude);
       maxLat = math.max(maxLat, widget.currentLocation!.latitude);
       minLng = math.min(minLng, widget.currentLocation!.longitude);
       maxLng = math.max(maxLng, widget.currentLocation!.longitude);
+      hasValidCoordinates = true;
     }
     
     // Include all route points
-    for (final route in widget.polylineRoutes!) {
-      final polylinePoints = route['polyline_points'] as List<dynamic>?;
-      if (polylinePoints != null) {
-        for (final point in polylinePoints) {
-          if (point is Map<String, dynamic>) {
-            final lat = (point['latitude'] as num?)?.toDouble();
-            final lng = (point['longitude'] as num?)?.toDouble();
-            
-            if (lat != null && lng != null) {
-              minLat = math.min(minLat, lat);
-              maxLat = math.max(maxLat, lat);
-              minLng = math.min(minLng, lng);
-              maxLng = math.max(maxLng, lng);
+    if (widget.polylineRoutes != null) {
+      for (final route in widget.polylineRoutes!) {
+        final polylinePoints = route['polyline_points'] as List<dynamic>?;
+        if (polylinePoints != null) {
+          for (final point in polylinePoints) {
+            if (point is Map<String, dynamic>) {
+              final lat = (point['latitude'] as num?)?.toDouble();
+              final lng = (point['longitude'] as num?)?.toDouble();
+              
+              if (lat != null && lng != null) {
+                minLat = math.min(minLat, lat);
+                maxLat = math.max(maxLat, lat);
+                minLng = math.min(minLng, lng);
+                maxLng = math.max(maxLng, lng);
+                hasValidCoordinates = true;
+              }
             }
           }
         }
       }
     }
     
-    if (minLat != double.infinity) {
+    // ADDED: Include all reporter locations
+    for (final report in widget.reports) {
+      minLat = math.min(minLat, report.location.latitude);
+      maxLat = math.max(maxLat, report.location.latitude);
+      minLng = math.min(minLng, report.location.longitude);
+      maxLng = math.max(maxLng, report.location.longitude);
+      hasValidCoordinates = true;
+    }
+    
+    if (hasValidCoordinates && minLat != double.infinity) {
       final bounds = LatLngBounds(
         southwest: LatLng(minLat, minLng),
         northeast: LatLng(maxLat, maxLng),
@@ -403,8 +524,8 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   
   @override
   Widget build(BuildContext context) {
-    if (widget.currentLocation == null) {
-      return _buildNoLocationView();
+    if (widget.currentLocation == null && widget.reports.isEmpty) {
+      return _buildNoDataView();
     }
     
     return Stack(
@@ -415,43 +536,49 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
             _mapController = controller;
             print('🗺️ Google Map created successfully');
             
-            // Fit all routes after map is ready
             Future.delayed(Duration(milliseconds: 500), () {
               _fitAllRoutes();
             });
           },
           initialCameraPosition: CameraPosition(
-            target: LatLng(
-              widget.currentLocation!.latitude,
-              widget.currentLocation!.longitude,
-            ),
+            target: widget.reports.isNotEmpty 
+              ? LatLng(widget.reports.first.location.latitude, widget.reports.first.location.longitude) // ENHANCED: Focus on reports if available
+              : LatLng(
+                  widget.currentLocation?.latitude ?? 3.1390,
+                  widget.currentLocation?.longitude ?? 101.6869,
+                ),
             zoom: 12.0,
           ),
           markers: _markers,
           polylines: _polylines,
-          myLocationEnabled: true,
-          myLocationButtonEnabled: false, // We'll add custom controls
-          zoomControlsEnabled: false, // Custom zoom controls
+          myLocationEnabled: false, // ENHANCED: Disable since we show custom marker
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
           mapToolbarEnabled: true,
           compassEnabled: true,
           mapType: MapType.normal,
           trafficEnabled: true,
           onCameraMove: (CameraPosition position) {
             _currentZoom = position.zoom;
+            // Update current location marker visibility based on zoom
+            if ((_currentZoom < 13.0) != _shouldShowCurrentLocationMarker()) {
+              _updateMarkersAndPolylines();
+            }
           },
           onTap: (LatLng latLng) {
-            // Deselect route when tapping empty area
             setState(() {
               _selectedRouteIndex = null;
               _selectedRoute = null;
               _showRouteDetails = false;
+              _selectedReport = null;
+              _showReporterDetails = false;
             });
             _updateMarkersAndPolylines();
             widget.onRouteSelected?.call(-1);
           },
         ),
         
-        // Top info panel
+        // Top info panel - ENHANCED with reporter info
         _buildTopInfoPanel(),
         
         // Zoom controls
@@ -461,13 +588,17 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         if (_showRouteDetails && _selectedRoute != null)
           _buildRouteDetailsPanel(),
         
+        // ADDED: Reporter details panel
+        if (_showReporterDetails && _selectedReport != null)
+          _buildReporterDetailsPanel(),
+        
         // Map controls
         _buildMapControls(),
       ],
     );
   }
   
-  Widget _buildNoLocationView() {
+  Widget _buildNoDataView() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -475,13 +606,14 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
           Icon(Icons.location_off, size: 64, color: Colors.grey.shade400),
           SizedBox(height: 16),
           Text(
-            "Location not available",
+            "No data available",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           SizedBox(height: 8),
           Text(
-            "Please enable location services",
+            "No location data, routes, or reports found",
             style: TextStyle(color: Colors.grey),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -506,7 +638,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
                   color: Colors.blue,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.route, color: Colors.white, size: 20),
+                child: Icon(Icons.admin_panel_settings, color: Colors.white, size: 20),
               ),
               SizedBox(width: 12),
               Expanded(
@@ -514,26 +646,32 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${widget.polylineRoutes?.length ?? 0} Routes Found',
+                      // ENHANCED: Show different title based on data
+                      widget.reports.isEmpty ? 'Water Supply Network' : 'Admin Dashboard',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     Text(
-                      'Tap route markers for details • Zoom: ${_currentZoom.toStringAsFixed(1)}x',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      // ENHANCED: Better subtitle with reporter info
+                      widget.reports.isEmpty 
+                        ? '${widget.polylineRoutes?.length ?? 0} water supplies • No reports'
+                        : '${widget.polylineRoutes?.length ?? 0} supplies • ${widget.reports.length} reports • Zoom: ${_currentZoom.toStringAsFixed(1)}x',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
                   ],
                 ),
               ),
-              if (_selectedRouteIndex != null)
+              // ENHANCED: Show current location status
+              if (!_shouldShowCurrentLocationMarker() && widget.currentLocation != null)
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.blue,
+                    color: Colors.green.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withOpacity(0.3)),
                   ),
                   child: Text(
-                    'Route ${_selectedRouteIndex! + 1}',
-                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    'FOCUS MODE',
+                    style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -574,12 +712,12 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   Widget _buildMapControls() {
     return Positioned(
       right: 16,
-      bottom: 100,
+      bottom: _showRouteDetails || _showReporterDetails ? 320 : 100,
       child: Column(
         children: [
-          // Fit all routes button
+          // Fit all button
           FloatingActionButton(
-            heroTag: "fit_routes",
+            heroTag: "fit_all",
             mini: true,
             onPressed: _fitAllRoutes,
             child: Icon(Icons.center_focus_strong),
@@ -587,12 +725,12 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
             foregroundColor: Colors.white,
           ),
           SizedBox(height: 8),
-          // My location button
-          FloatingActionButton(
-            heroTag: "my_location",
-            mini: true,
-            onPressed: () {
-              if (widget.currentLocation != null) {
+          // My location button (only show if current location available)
+          if (widget.currentLocation != null)
+            FloatingActionButton(
+              heroTag: "my_location",
+              mini: true,
+              onPressed: () {
                 _mapController?.animateCamera(
                   CameraUpdate.newCameraPosition(
                     CameraPosition(
@@ -604,12 +742,11 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
                     ),
                   ),
                 );
-              }
-            },
-            child: Icon(Icons.my_location),
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-          ),
+              },
+              child: Icon(_shouldShowCurrentLocationMarker() ? Icons.my_location : Icons.location_searching),
+              backgroundColor: _shouldShowCurrentLocationMarker() ? Colors.green : Colors.orange,
+              foregroundColor: Colors.white,
+            ),
         ],
       ),
     );
@@ -644,14 +781,16 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: _selectedRouteIndex == 0 ? Colors.green : Colors.blue,
+                      color: _selectedRoute!['is_shortest'] == true ? Colors.green : Colors.blue, // ENHANCED
                       shape: BoxShape.circle,
                     ),
                     child: Center(
-                      child: Text(
-                        '${(_selectedRouteIndex ?? 0) + 1}',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
+                      child: _selectedRoute!['is_shortest'] == true 
+                        ? Icon(Icons.star, color: Colors.white, size: 16) // ENHANCED: Star for shortest
+                        : Text(
+                            '${(_selectedRouteIndex ?? 0) + 1}',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
                     ),
                   ),
                   SizedBox(width: 12),
@@ -660,8 +799,15 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _selectedRoute!['destination_name'] ?? 'Water Supply',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          // ENHANCED: Show shortest route indicator
+                          _selectedRoute!['is_shortest'] == true 
+                            ? '🏆 Shortest Route'
+                            : _selectedRoute!['destination_name'] ?? 'Water Supply',
+                          style: TextStyle(
+                            fontSize: 16, 
+                            fontWeight: FontWeight.bold, 
+                            color: _selectedRoute!['is_shortest'] == true ? Colors.green : Colors.blue,
+                          ),
                         ),
                         Text(
                           _selectedRoute!['destination_address'] ?? 'Terengganu Water Infrastructure',
@@ -720,8 +866,8 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
                     child: _buildDetailItem(
                       Icons.flag,
                       'Priority',
-                      _selectedRouteIndex == 0 ? 'Nearest Route' : 'Alternative Route',
-                      _selectedRouteIndex == 0 ? Colors.green : Colors.orange,
+                      _selectedRoute!['is_shortest'] == true ? 'Shortest Route' : 'Route ${(_selectedRouteIndex ?? 0) + 1}', // ENHANCED
+                      _selectedRoute!['is_shortest'] == true ? Colors.green : Colors.orange,
                     ),
                   ),
                   SizedBox(width: 16),
@@ -759,9 +905,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        // Open external navigation
                         print('🚗 Navigate to: ${_selectedRoute!['destination_name']}');
-                        // Here you could integrate with Google Maps app
                       },
                       icon: Icon(Icons.navigation, size: 18),
                       label: Text('Navigate'),
@@ -778,6 +922,247 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         ),
       ),
     );
+  }
+  
+  // ADDED: Reporter details panel
+  Widget _buildReporterDetailsPanel() {
+    return Positioned(
+      bottom: 16,
+      left: 16,
+      right: 16,
+      child: Card(
+        elevation: 6,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.orange.shade50, Colors.white],
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _getReporterColor(_selectedReport!.waterQuality),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.report_problem, color: Colors.white, size: 16),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _selectedReport!.title,
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange.shade800),
+                        ),
+                        Text(
+                          'Reporter: ${_selectedReport!.userName}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () {
+                      setState(() {
+                        _selectedReport = null;
+                        _showReporterDetails = false;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              
+              SizedBox(height: 16),
+              
+              // Report details
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildDetailItem(
+                      Icons.water_drop,
+                      'Water Quality',
+                      _getWaterQualityDisplayName(_selectedReport!.waterQuality),
+                      _getReporterColor(_selectedReport!.waterQuality),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: _buildDetailItem(
+                      Icons.schedule,
+                      'Reported',
+                      '${_selectedReport!.createdAt.day}/${_selectedReport!.createdAt.month}',
+                      Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+              
+              SizedBox(height: 12),
+              
+              // Description
+              if (_selectedReport!.description.isNotEmpty) ...[
+                Text(
+                  'Description:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  _selectedReport!.description,
+                  style: TextStyle(fontSize: 14, color: Colors.black87),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 12),
+              ],
+              
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        _zoomToLocation(LatLng(_selectedReport!.location.latitude, _selectedReport!.location.longitude));
+                      },
+                      icon: Icon(Icons.zoom_in_map, size: 18),
+                      label: Text('Zoom to Report'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        // Find nearest water supply
+                        _findAndShowNearestWaterSupply();
+                      },
+                      icon: Icon(Icons.water_drop, size: 18),
+                      label: Text('Nearest Supply'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  // ADDED: Find and highlight nearest water supply to reporter
+  void _findAndShowNearestWaterSupply() {
+    if (_selectedReport == null || widget.polylineRoutes == null) return;
+    
+    double nearestDistance = double.infinity;
+    int nearestIndex = -1;
+    
+    for (int i = 0; i < widget.polylineRoutes!.length; i++) {
+      final route = widget.polylineRoutes![i];
+      final destination = route['destination_details'] as Map<String, dynamic>? ?? {};
+      final lat = (destination['latitude'] as num?)?.toDouble();
+      final lng = (destination['longitude'] as num?)?.toDouble();
+      
+      if (lat != null && lng != null) {
+        final distance = _calculateDistance(
+          _selectedReport!.location.latitude,
+          _selectedReport!.location.longitude,
+          lat,
+          lng,
+        );
+        
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = i;
+        }
+      }
+    }
+    
+    if (nearestIndex >= 0) {
+      setState(() {
+        _selectedRouteIndex = nearestIndex;
+        _selectedRoute = widget.polylineRoutes![nearestIndex];
+        _showRouteDetails = true;
+        _showReporterDetails = false;
+      });
+      
+      _updateMarkersAndPolylines();
+      widget.onRouteSelected?.call(nearestIndex);
+      _zoomToRoute(widget.polylineRoutes![nearestIndex]);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Nearest water supply: ${nearestDistance.toStringAsFixed(1)} km away'),
+          backgroundColor: Colors.blue,
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+  }
+  
+  // ADDED: Calculate distance between two points
+  double _calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+    const double earthRadius = 6371; // km
+    
+    final double dLat = _toRadians(lat2 - lat1);
+    final double dLng = _toRadians(lng2 - lng1);
+    
+    final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRadians(lat1)) * math.cos(_toRadians(lat2)) *
+        math.sin(dLng / 2) * math.sin(dLng / 2);
+    
+    final double c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    
+    return earthRadius * c;
+  }
+  
+  double _toRadians(double degrees) {
+    return degrees * (math.pi / 180);
+  }
+  
+  // ADDED: Get reporter marker color
+  Color _getReporterColor(WaterQualityState quality) {
+    switch (quality) {
+      case WaterQualityState.optimum:
+        return Colors.blue;
+      case WaterQualityState.lowTemp:
+        return Colors.cyan;
+      case WaterQualityState.highPh:
+      case WaterQualityState.lowPh:
+        return Colors.orange;
+      case WaterQualityState.highPhTemp:
+        return Colors.red;
+      case WaterQualityState.lowTempHighPh:
+        return Colors.purple;
+      case WaterQualityState.unknown:
+      default:
+        return Colors.grey;
+    }
   }
   
   Widget _buildDetailItem(IconData icon, String label, String value, Color color) {
@@ -801,6 +1186,8 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
             value,
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
             textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
