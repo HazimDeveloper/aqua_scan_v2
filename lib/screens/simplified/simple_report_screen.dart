@@ -474,7 +474,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     
     if (_detectionError != null) {
       title = 'Submit Without Analysis?';
-      message = 'AI analysis failed, but you can still submit this report with your manual observations. Continue?';
+      message = 'your report and input matter - the authorities will review your submission.';
     } else if (!_waterDetected && _imageFiles.isNotEmpty) {
       title = 'No Water Detected';
       message = 'AI did not detect water in your images. Do you still want to submit this report?';
@@ -501,7 +501,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text('Cancel'),
+              child: Text('Retake'),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
@@ -650,62 +650,24 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.isAdmin ? 'Enhanced AI Analysis' : 'Smart Water Detection',
+                              widget.isAdmin ? 'AI Analysis' : 'Smart Water Detection',
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '${_imageFiles.length}/$_maxImages photos • Enhanced error handling',
+                              '${_imageFiles.length}/$_maxImages photos added',
                               style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                             ),
                           ],
                         ),
                       ),
-                      if (_imageFiles.length < _maxImages)
-                        Container(
-                          decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(12)),
-                          child: IconButton(
-                            onPressed: _isSavingImages ? null : _pickImage,
-                            icon: _isSavingImages 
-                                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
-                                : Icon(Icons.add, color: Colors.white),
-                            tooltip: 'Add Photo',
-                          ),
-                        ),
+                     
+                  
                     ],
                   ),
                   
                   const SizedBox(height: 16),
                   
-                  // ENHANCED: Status banner
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor().withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _getStatusColor().withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: _getStatusColor(), borderRadius: BorderRadius.circular(8)),
-                          child: Icon(_getStatusIcon(), color: Colors.white, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(_getStatusTitle(), style: TextStyle(fontWeight: FontWeight.bold, color: _getStatusColor(), fontSize: 16)),
-                              const SizedBox(height: 4),
-                              Text(_getStatusSubtitle(), style: TextStyle(color: _getStatusColor().withOpacity(0.8), fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -716,18 +678,11 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         
         // Photos Grid
         if (_imageFiles.isNotEmpty) _buildPhotosGrid(themeColor),
-        
-        const SizedBox(height: 16),
-        
-        // Camera Button
-        _buildCameraButton(themeColor),
-        
-        const SizedBox(height: 16),
-        
         // Analysis Results
         if (_isDetecting) _buildAnalyzingCard(themeColor)
         else if (_analysisCompleted) _buildAnalysisResultCard(themeColor)
         else if (_imageFiles.isNotEmpty) _buildAnalysisPrompt(themeColor),
+        _buildCameraButton(themeColor),
       ],
     );
   }
@@ -900,7 +855,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               _isSavingImages
                   ? 'Preparing for enhanced water detection...'
                   : _imageFiles.isEmpty
-                      ? 'AI will analyze for water presence and quality (with error recovery)'
+                      ? 'AI will analyze for water presence and quality'
                       : 'Multiple photos improve detection accuracy',
               style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
               textAlign: TextAlign.center,
@@ -968,10 +923,10 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Enhanced Water Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+              Text('Water Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
               const SizedBox(height: 8),
               Text(
-                'AI is analyzing your image with enhanced error handling. All scenarios are supported.',
+                'AI is analyzing your image with error handling. All scenarios are supported.',
                 style: TextStyle(color: Colors.blue.shade600, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
@@ -984,7 +939,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   children: [
                     Container(width: 8, height: 8, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
                     const SizedBox(width: 8),
-                    Text('Backend: Enhanced Error Recovery', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
+                    Text('Waiting For Detection ... ', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -1021,7 +976,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               Text('Ready for Water Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
               const SizedBox(height: 8),
               Text(
-                'Your photos are ready for AI analysis with enhanced error handling. Analysis will work even with challenging images.',
+                'Your photos are ready for AI analysis . Analysis will work even with challenging images.',
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.4),
                 textAlign: TextAlign.center,
               ),
@@ -1074,34 +1029,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [resultColor, resultColor.withOpacity(0.8)]),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(_getResultIcon(), color: Colors.white, size: 24),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_getResultTitle(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text(_getResultSubtitle(), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => _detectWaterQuality(_imageFiles.first),
-                    icon: Icon(Icons.refresh, color: themeColor),
-                    tooltip: 'Re-analyze',
-                  ),
-                ],
-              ),
+              
               
               const SizedBox(height: 24),
               
@@ -1124,7 +1052,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Report can be submitted regardless of analysis result. Your manual observations are valuable.',
+                        'Your Report and Input Matter -The Authorities Will Review Your Submission',
                         style: TextStyle(fontSize: 12, color: Colors.green.shade800, fontWeight: FontWeight.w500),
                       ),
                     ),
@@ -1212,8 +1140,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        WaterQualityUtils.getWaterQualityText(_detectedQuality),
+                      Text("Classification Result",
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: resultColor),
                       ),
                       const SizedBox(height: 4),
@@ -1224,7 +1151,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                             color: resultColor.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text('Class: $_originalClass', style: TextStyle(fontSize: 10, color: resultColor, fontWeight: FontWeight.w600)),
+                          child: Text('$_originalClass', style: TextStyle(fontSize: 14, color: resultColor, fontWeight: FontWeight.w600)),
                         ),
                     ],
                   ),
@@ -1306,7 +1233,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     if (_analysisCompleted && !_waterDetected) return 'Submit with manual observations';
     if (_analysisCompleted && _isLowConfidence) return 'Low confidence but result available';
     if (_analysisCompleted && _waterDetected) return 'Quality analysis completed successfully';
-    return 'Automatic water detection with enhanced error handling';
+    return 'Automatic water detection ';
   }
 
   Color _getAnalysisStatusColor() {
@@ -1393,7 +1320,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Admin Mode with Enhanced Error Handling', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      const Text('Admin Mode ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                       const SizedBox(height: 6),
                       Text(
                         'Advanced water detection with comprehensive error recovery - all scenarios supported',
@@ -1559,7 +1486,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                     Icon(widget.isAdmin ? Icons.admin_panel_settings : Icons.send, size: 24),
                     const SizedBox(width: 12),
                     Text(
-                      widget.isAdmin ? 'Create Enhanced Report' : 'Submit Enhanced Report',
+                      widget.isAdmin ? 'Report Water Issue' : 'Report Water Issue',
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ],

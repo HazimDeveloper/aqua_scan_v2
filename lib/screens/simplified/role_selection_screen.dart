@@ -178,7 +178,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
             border: Border.all(color: Colors.orange.withOpacity(0.3)),
           ),
           child: const Text(
-            'Testing Mode - No Login Required',
+            'Your Solution for Clean Water',
             style: TextStyle(
               fontSize: 12,
               color: Colors.orange,
@@ -383,15 +383,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
               size: 16,
               color: AppTheme.textSecondaryColor,
             ),
-            const SizedBox(width: 8),
-            Text(
-              'Testing mode - Data stored locally',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppTheme.textSecondaryColor,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
+           
           ],
         ),
         const SizedBox(height: 8),
@@ -471,7 +463,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => 
-            const SimpleAdminScreen(),
+             SimpleAdminScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;

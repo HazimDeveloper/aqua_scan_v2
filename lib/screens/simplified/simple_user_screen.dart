@@ -153,11 +153,6 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                 
                 const SizedBox(height: 24),
                 
-                // Quick Stats
-                _buildQuickStats(),
-                
-                const SizedBox(height: 24),
-                
                 // Main Action - Report Issue
                 _buildMainActionSection(),
                 
@@ -227,7 +222,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Welcome, User!',
+                    'Welcome to AquaScan!',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -236,7 +231,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Help improve water quality by reporting issues in your community',
+                    'Spot . Report . Improve. - Empower Your Community and Support The Authorities ',
                     style: TextStyle(
                       color: Colors.blue.shade800,
                       fontSize: 14,
@@ -245,80 +240,6 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickStats() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            'Your Reports',
-            _isLoadingStats ? '...' : _totalReports.toString(),
-            Icons.report,
-            Colors.blue,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            'AI Analysis',
-            'Ready',
-            Icons.psychology,
-            Colors.purple,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            'Status',
-            'Active',
-            Icons.check_circle,
-            Colors.green,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: color.withOpacity(0.05),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: color.withOpacity(0.8),
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -398,7 +319,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                   ),
                   const SizedBox(height: 20),
                   const Text(
-                    'Take Photo & Report',
+                    'Snap and Share',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -406,7 +327,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Capture water quality issues and let our AI analyze them automatically',
+                    'Notice Water Issue? - Together We Helps Authorities Safeguard Your Community',
                     style: TextStyle(
                       color: AppTheme.textSecondaryColor,
                       fontSize: 14,
