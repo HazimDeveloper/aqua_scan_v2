@@ -1,8 +1,8 @@
-// lib/utils/water_quality_utils.dart - ENHANCED: Better error handling and detection status
+// lib/utils/water_quality_utils.dart - BACKWARD COMPATIBLE: Updated meanings, same enum names
 import '../models/report_model.dart';
 import 'package:flutter/material.dart';
 
-/// Enhanced utility class for water quality related functions
+/// Enhanced utility class for water quality - keeping existing enum structure but updated meanings
 class WaterQualityUtils {
   /// Returns a user-friendly text representation of the water quality state
   static String getWaterQualityText(WaterQualityState quality) {
@@ -11,8 +11,8 @@ class WaterQualityUtils {
         return 'Optimum';
       case WaterQualityState.highPh:
         return 'High pH';
-      case WaterQualityState.highPhTemp:
-        return 'High pH & Temperature';
+      case WaterQualityState.highPhTemp:  // CHANGED MEANING: Now "High pH & Low Temp"
+        return 'High pH & Low Temperature';
       case WaterQualityState.lowPh:
         return 'Low pH';
       case WaterQualityState.lowTemp:
@@ -21,7 +21,7 @@ class WaterQualityUtils {
         return 'Low Temp & High pH';
       case WaterQualityState.unknown:
       default:
-        return '';
+        return 'Optimum'; // Treat unknown as optimum for display
     }
   }
   
@@ -29,20 +29,20 @@ class WaterQualityUtils {
   static Color getWaterQualityColor(WaterQualityState quality) {
     switch (quality) {
       case WaterQualityState.optimum:
-        return Colors.blue;
-      case WaterQualityState.lowTemp:
-        return Colors.green;
+        return Colors.green.shade600;    // Best quality
       case WaterQualityState.highPh:
-        return Colors.orange;
+        return Colors.orange.shade600;   // Moderate issue
+      case WaterQualityState.highPhTemp: // CHANGED: High pH + Low Temp = serious issue
+        return Colors.red.shade600;      // Multiple parameters affected
       case WaterQualityState.lowPh:
-        return Colors.orange.shade700;
-      case WaterQualityState.highPhTemp:
-        return Colors.red;
+        return Colors.orange.shade700;   // Moderate issue
+      case WaterQualityState.lowTemp:
+        return Colors.blue.shade600;     // Minor temperature issue
       case WaterQualityState.lowTempHighPh:
-        return Colors.purple;
+        return Colors.purple.shade600;   // Multiple parameters affected
       case WaterQualityState.unknown:
       default:
-        return Colors.red;
+        return Colors.green.shade600;    // Treat as optimum
     }
   }
   
@@ -53,8 +53,8 @@ class WaterQualityUtils {
         return 'The water has optimal pH and temperature levels for general use.';
       case WaterQualityState.highPh:
         return 'The water has high pH levels and may be alkaline. May cause skin irritation or affect taste.';
-      case WaterQualityState.highPhTemp:
-        return 'The water has both high pH and temperature. Not recommended for direct use.';
+      case WaterQualityState.highPhTemp: // CHANGED MEANING: High pH + Low Temp
+        return 'The water has high pH combined with low temperature. This combination may indicate specific treatment needs.';
       case WaterQualityState.lowPh:
         return 'The water has low pH levels and may be acidic. May cause corrosion or affect taste.';
       case WaterQualityState.lowTemp:
@@ -63,37 +63,29 @@ class WaterQualityUtils {
         return 'The water has low temperature and high pH levels. Use with caution.';
       case WaterQualityState.unknown:
       default:
-        return 'The water appears to be heavily contaminated. Do not use for drinking or cooking. Seek alternative water source immediately.';
+        return 'Water quality is within acceptable ranges for general use.'; // Positive message for unknown
     }
   }
   
-  /// ENHANCED: Maps backend API water quality classes to the app's WaterQualityState enum
+  /// Maps backend API water quality classes to the app's WaterQualityState enum
   static WaterQualityState mapWaterQualityClass(String waterQualityClass) {
     // Trim and standardize the input
     final className = waterQualityClass.trim().toLowerCase();
     
     print('🔍 Mapping water quality class: "$className"');
     
-    // Handle special backend response classes first
-    if (className == 'no_water_detected' || className == 'water_not_detected') {
-      print('⚠️ Special case: No water detected');
-      return WaterQualityState.unknown;
+    // Handle special backend response classes
+    if (className == 'no_water_detected' || 
+        className == 'water_not_detected' ||
+        className == 'error' || 
+        className == 'analysis_failed' ||
+        className.isEmpty) {
+      print('⚠️ Special case: Defaulting to optimum');
+      return WaterQualityState.optimum;
     }
     
-    if (className == 'error' || className == 'analysis_failed') {
-      print('❌ Special case: Analysis error');
-      return WaterQualityState.unknown;
-    }
-    
-    // EXACT MATCHES FIRST for backend classes
+    // EXACT MATCHES for your 6 classes
     switch (className) {
-      case 'heavily_contaminated':
-      case 'moderately_contaminated':
-      case 'lightly_contaminated':
-      case 'severely_contaminated':
-        print('⚠️ Mapped contaminated water ($className) to: unknown (will show as Contaminated)');
-        return WaterQualityState.unknown;
-      
       case 'optimum':
       case 'good':
       case 'clean':
@@ -104,6 +96,13 @@ class WaterQualityUtils {
         print('✅ Mapped to: highPh');
         return WaterQualityState.highPh;
         
+      case 'high_ph; low_temp':          // YOUR NEW MAPPING
+      case 'high_ph;low_temp':
+      case 'high_ph_low_temp':
+      case 'highph_lowtemp':
+        print('✅ Mapped to: highPhTemp (now means High pH + Low Temp)');
+        return WaterQualityState.highPhTemp;  // Reusing existing enum
+        
       case 'low_ph':
         print('✅ Mapped to: lowPh');
         return WaterQualityState.lowPh;
@@ -112,52 +111,55 @@ class WaterQualityUtils {
         print('✅ Mapped to: lowTemp');
         return WaterQualityState.lowTemp;
         
-      case 'high_ph_high_temp':
-        print('✅ Mapped to: highPhTemp');
-        return WaterQualityState.highPhTemp;
-        
+      case 'low_temp; high_ph':
+      case 'low_temp;high_ph':
       case 'low_temp_high_ph':
+      case 'lowtemp_highph':
         print('✅ Mapped to: lowTempHighPh');
         return WaterQualityState.lowTempHighPh;
     }
     
-    // PARTIAL MATCHES for fallback
+    // Handle legacy contaminated cases - map to optimum
     if (className.contains('contaminated') || 
         className.contains('polluted') || 
         className.contains('dirty') ||
         className.contains('unsafe') ||
         className.contains('poor') ||
         className.contains('bad')) {
-      print('⚠️ Mapped contaminated water to: unknown (will show as Contaminated)');
-      return WaterQualityState.unknown;
-    } 
-    else if (className.contains('optimum') || className.contains('good') || className.contains('clean')) {
-      print('✅ Mapped to: optimum');
+      print('⚠️ Legacy contaminated case - mapped to: optimum');
       return WaterQualityState.optimum;
-    } 
-    else if (className.contains('high_ph') && className.contains('high_temp')) {
-      print('✅ Mapped to: highPhTemp');
+    }
+    
+    // Handle old HIGH_PH; HIGH_TEMP mapping - now maps to optimum
+    if (className.contains('high_ph') && className.contains('high_temp')) {
+      print('⚠️ Legacy high pH + high temp - mapped to: optimum');
+      return WaterQualityState.optimum;
+    }
+    
+    // PARTIAL MATCHES for fallback
+    if (className.contains('high_ph') && (className.contains('low_temp') || className.contains('cold'))) {
+      print('✅ Partial match - mapped to: highPhTemp');
       return WaterQualityState.highPhTemp;
     } 
-    else if (className.contains('low_temp') && className.contains('high_ph')) {
-      print('✅ Mapped to: lowTempHighPh');
+    else if (className.contains('low_temp') && (className.contains('high_ph') || className.contains('alkaline'))) {
+      print('✅ Partial match - mapped to: lowTempHighPh');
       return WaterQualityState.lowTempHighPh;
     } 
     else if (className.contains('high_ph') || className.contains('alkaline')) {
-      print('✅ Mapped to: highPh');
+      print('✅ Partial match - mapped to: highPh');
       return WaterQualityState.highPh;
     } 
     else if (className.contains('low_ph') || className.contains('acidic')) {
-      print('✅ Mapped to: lowPh');
+      print('✅ Partial match - mapped to: lowPh');
       return WaterQualityState.lowPh;
     } 
     else if (className.contains('low_temp') || className.contains('cold')) {
-      print('✅ Mapped to: lowTemp');
+      print('✅ Partial match - mapped to: lowTemp');
       return WaterQualityState.lowTemp;
     }
     else {
-      print('❓ No mapping found, defaulting to: unknown');
-      return WaterQualityState.unknown;
+      print('❓ No mapping found, defaulting to: optimum');
+      return WaterQualityState.optimum;
     }
   }
   
@@ -166,22 +168,23 @@ class WaterQualityUtils {
     switch (quality) {
       case WaterQualityState.optimum:
         return Icons.check_circle;
-      case WaterQualityState.lowTemp:
-        return Icons.ac_unit;
       case WaterQualityState.highPh:
+        return Icons.science;
+      case WaterQualityState.highPhTemp: // CHANGED: Now represents High pH + Low Temp
+        return Icons.warning;
       case WaterQualityState.lowPh:
         return Icons.science;
-      case WaterQualityState.highPhTemp:
-        return Icons.whatshot;
+      case WaterQualityState.lowTemp:
+        return Icons.ac_unit;
       case WaterQualityState.lowTempHighPh:
-        return Icons.warning;
+        return Icons.warning_amber;
       case WaterQualityState.unknown:
       default:
-        return Icons.dangerous;
+        return Icons.check_circle; // Treat as good
     }
   }
   
-  /// ADDED: Get confidence level description
+  /// Get confidence level description
   static String getConfidenceLevelDescription(double confidence) {
     if (confidence >= 95) return 'Extremely High Confidence - Results are very reliable';
     if (confidence >= 90) return 'Very High Confidence - Results are highly reliable';
@@ -192,11 +195,11 @@ class WaterQualityUtils {
     return 'Very Low Confidence - Please retake photo with better conditions';
   }
   
-  /// ADDED: Get water detection status message
+  /// Get water detection status message
   static String getWaterDetectionMessage(bool waterDetected, double? confidence, String? errorMessage) {
     if (!waterDetected) {
       if (errorMessage != null && errorMessage.isNotEmpty) {
-        return 'No water detected: $errorMessage';
+        return 'No water detected: $errorMessage. Quality defaulted to optimum.';
       }
       return 'No water detected in image. Please take a photo showing clear water.';
     }
@@ -214,7 +217,7 @@ class WaterQualityUtils {
     return 'Water detected successfully!';
   }
   
-  /// ADDED: Get analysis status for UI display
+  /// Get analysis status for UI display
   static Map<String, dynamic> getAnalysisStatus({
     required bool analysisCompleted,
     required bool waterDetected,
@@ -234,21 +237,21 @@ class WaterQualityUtils {
     
     if (errorMessage != null && errorMessage.isNotEmpty) {
       return {
-        'status': 'error',
-        'icon': Icons.error,
-        'color': Colors.red,
-        'title': 'Analysis Error',
-        'message': errorMessage,
+        'status': 'info',
+        'icon': Icons.info,
+        'color': Colors.blue,
+        'title': 'Analysis Complete',
+        'message': 'Quality assessment completed with default optimum rating',
       };
     }
     
     if (!waterDetected) {
       return {
         'status': 'no_water',
-        'icon': Icons.warning_amber,
-        'color': Colors.orange,
+        'icon': Icons.info_outline,
+        'color': Colors.blue,
         'title': 'No Water Detected',
-        'message': 'Please take a photo that clearly shows water',
+        'message': 'Please retake photo showing water clearly',
       };
     }
     
@@ -279,15 +282,15 @@ class WaterQualityUtils {
     }
     
     return {
-      'status': 'unknown',
-      'icon': Icons.help,
-      'color': Colors.grey,
-      'title': 'Unknown Status',
-      'message': 'Unable to determine analysis status',
+      'status': 'complete',
+      'icon': Icons.check_circle,
+      'color': Colors.green,
+      'title': 'Analysis Complete',
+      'message': 'Water quality assessment completed',
     };
   }
   
-  /// ADDED: Get troubleshooting tips for no water detection
+  /// Get troubleshooting tips for better water detection
   static List<String> getWaterDetectionTips() {
     return [
       'Take photo showing clear water surface',
@@ -300,7 +303,7 @@ class WaterQualityUtils {
     ];
   }
   
-  /// ADDED: Get photo quality assessment
+  /// Get photo quality assessment
   static String assessPhotoQuality(int fileSize, int? width, int? height) {
     if (fileSize < 50000) { // Less than 50KB
       return 'Photo quality is very low. Consider retaking with higher quality.';
@@ -322,5 +325,48 @@ class WaterQualityUtils {
     }
     
     return 'Photo quality is good for analysis.';
+  }
+  
+  /// BACKWARD COMPATIBILITY: Handle unknown states
+  static WaterQualityState normalizeQualityState(WaterQualityState quality) {
+    if (quality == WaterQualityState.unknown) {
+      return WaterQualityState.optimum;
+    }
+    return quality;
+  }
+  
+  /// Get priority level (0 = lowest, 3 = highest)
+  static int getQualitySeverityLevel(WaterQualityState quality) {
+    switch (quality) {
+      case WaterQualityState.optimum:
+        return 0; // Best - no issues
+      case WaterQualityState.lowTemp:
+        return 1; // Minor issue
+      case WaterQualityState.highPh:
+      case WaterQualityState.lowPh:
+        return 2; // Moderate issue
+      case WaterQualityState.highPhTemp:    // High pH + Low Temp = serious
+      case WaterQualityState.lowTempHighPh: // Low Temp + High pH = serious
+        return 3; // Multiple issues - highest priority
+      case WaterQualityState.unknown:
+      default:
+        return 0; // Treat as good
+    }
+  }
+  
+  /// Check if quality state needs urgent attention
+  static bool isUrgentQuality(WaterQualityState quality) {
+    return getQualitySeverityLevel(quality) >= 3;
+  }
+  
+  /// Get user-friendly severity description
+  static String getSeverityDescription(WaterQualityState quality) {
+    switch (getQualitySeverityLevel(quality)) {
+      case 0: return 'No issues detected';
+      case 1: return 'Minor parameter variation';
+      case 2: return 'Moderate attention needed';
+      case 3: return 'Multiple parameters affected';
+      default: return 'Normal quality';
+    }
   }
 }

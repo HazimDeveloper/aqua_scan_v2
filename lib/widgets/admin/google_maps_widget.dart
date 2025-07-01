@@ -1,4 +1,4 @@
-// lib/widgets/admin/google_maps_widget.dart - SIMPLIFIED: Simple Address Only Info Windows
+// lib/widgets/admin/google_maps_widget.dart - ENHANCED: Added Custom Zoom Controls
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -48,7 +48,11 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   ReportModel? _selectedReport;
   double _currentZoom = 12.0;
   
-  // SIMPLIFIED: Address Cache untuk performance
+  // NEW: Zoom control states
+  bool _showZoomControls = true;
+  Timer? _hideControlsTimer;
+  
+  // Address Cache untuk performance
   final Map<String, String> _addressCache = {};
   bool _loadingAddresses = false;
   
@@ -57,8 +61,9 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     super.initState();
     _initializeAnimations();
     _selectedRouteIndex = widget.selectedRouteIndex;
-    _preloadAddresses(); // Load addresses in background
+    _preloadAddresses();
     _updateMarkersAndPolylines();
+    _startHideControlsTimer(); // Auto-hide controls after 3 seconds
   }
   
   @override
@@ -77,6 +82,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   void dispose() {
     _pulseController.dispose();
     _reporterPulseController.dispose();
+    _hideControlsTimer?.cancel();
     super.dispose();
   }
   
@@ -100,7 +106,139 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     );
   }
   
-  // SIMPLIFIED: Preload addresses untuk semua locations
+  // NEW: Timer functions for auto-hiding controls
+  void _startHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _showZoomControls = false;
+        });
+      }
+    });
+  }
+  
+  void _showControlsTemporarily() {
+    if (mounted) {
+      setState(() {
+        _showZoomControls = true;
+      });
+      _startHideControlsTimer();
+    }
+  }
+  
+  // NEW: Zoom control functions
+  Future<void> _zoomIn() async {
+    if (_mapController != null) {
+      final double newZoom = math.min(_currentZoom + 1.0, 20.0);
+      await _mapController!.animateCamera(
+        CameraUpdate.zoomTo(newZoom),
+      );
+      setState(() {
+        _currentZoom = newZoom;
+      });
+      _showControlsTemporarily();
+    }
+  }
+  
+  Future<void> _zoomOut() async {
+    if (_mapController != null) {
+      final double newZoom = math.max(_currentZoom - 1.0, 2.0);
+      await _mapController!.animateCamera(
+        CameraUpdate.zoomTo(newZoom),
+      );
+      setState(() {
+        _currentZoom = newZoom;
+      });
+      _showControlsTemporarily();
+    }
+  }
+  
+  // NEW: Fit all routes with padding
+  Future<void> _fitAllRoutes() async {
+    if (_mapController == null) return;
+    
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
+    
+    bool hasValidCoordinates = false;
+    
+    if (widget.currentLocation != null && _shouldShowCurrentLocationMarker()) {
+      minLat = math.min(minLat, widget.currentLocation!.latitude);
+      maxLat = math.max(maxLat, widget.currentLocation!.latitude);
+      minLng = math.min(minLng, widget.currentLocation!.longitude);
+      maxLng = math.max(maxLng, widget.currentLocation!.longitude);
+      hasValidCoordinates = true;
+    }
+    
+    if (widget.polylineRoutes != null) {
+      for (final route in widget.polylineRoutes!) {
+        final polylinePoints = route['polyline_points'] as List<dynamic>?;
+        if (polylinePoints != null) {
+          for (final point in polylinePoints) {
+            if (point is Map<String, dynamic>) {
+              final lat = (point['latitude'] as num?)?.toDouble();
+              final lng = (point['longitude'] as num?)?.toDouble();
+              
+              if (lat != null && lng != null) {
+                minLat = math.min(minLat, lat);
+                maxLat = math.max(maxLat, lat);
+                minLng = math.min(minLng, lng);
+                maxLng = math.max(maxLng, lng);
+                hasValidCoordinates = true;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    for (final report in widget.reports) {
+      minLat = math.min(minLat, report.location.latitude);
+      maxLat = math.max(maxLat, report.location.latitude);
+      minLng = math.min(minLng, report.location.longitude);
+      maxLng = math.max(maxLng, report.location.longitude);
+      hasValidCoordinates = true;
+    }
+    
+    if (hasValidCoordinates && minLat != double.infinity) {
+      final bounds = LatLngBounds(
+        southwest: LatLng(minLat, minLng),
+        northeast: LatLng(maxLat, maxLng),
+      );
+      
+      await _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 50.0),
+      );
+    }
+    
+    _showControlsTemporarily();
+  }
+  
+  // NEW: Go to current location
+  Future<void> _goToCurrentLocation() async {
+    if (_mapController != null && widget.currentLocation != null) {
+      await _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(
+              widget.currentLocation!.latitude,
+              widget.currentLocation!.longitude,
+            ),
+            zoom: 16.0,
+          ),
+        ),
+      );
+      setState(() {
+        _currentZoom = 16.0;
+      });
+      _showControlsTemporarily();
+    }
+  }
+  
+  // Preload addresses untuk semua locations
   Future<void> _preloadAddresses() async {
     if (_loadingAddresses) return;
     
@@ -175,7 +313,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     }
   }
   
-  // SIMPLIFIED: Load simple address untuk specific location
+  // Load simple address untuk specific location
   Future<void> _loadSimpleAddressForLocation(double lat, double lng, String fallbackName) async {
     final key = '$lat,$lng';
     
@@ -198,7 +336,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     }
   }
   
-  // SIMPLIFIED: Get simple address dari coordinates
+  // Get simple address dari coordinates
   Future<String> _getSimpleAddressFromCoordinates(double latitude, double longitude) async {
     try {
       final placemarks = await placemarkFromCoordinates(latitude, longitude);
@@ -206,7 +344,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         
-        // SIMPLIFIED: Build simple address (cuma main parts sahaja)
+        // Build simple address (cuma main parts sahaja)
         List<String> addressParts = [];
         
         if (place.street != null && place.street!.isNotEmpty) {
@@ -235,7 +373,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     }
   }
   
-  // SIMPLIFIED: Get cached address atau loading message
+  // Get cached address atau loading message
   String _getCachedAddress(double lat, double lng, {String fallback = 'Loading address...'}) {
     final key = '$lat,$lng';
     return _addressCache[key] ?? fallback;
@@ -292,7 +430,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
            _currentZoom < 13.0;
   }
   
-  // SIMPLIFIED: Current location marker dengan simple address
+  // Current location marker dengan simple address
   Marker _buildSimpleCurrentLocationMarker() {
     final currentLat = widget.currentLocation!.latitude;
     final currentLng = widget.currentLocation!.longitude;
@@ -304,12 +442,12 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       infoWindow: InfoWindow(
         title: 'Your Location',
-        snippet: address, // SIMPLE: Cuma address sahaja
+        snippet: address,
       ),
     );
   }
   
-  // SIMPLIFIED: Route marker dengan simple address info sahaja
+  // Route marker dengan simple address info sahaja
   Marker? _buildSimpleRouteMarker(Map<String, dynamic> route, int index) {
     final destination = route['destination_details'] as Map<String, dynamic>? ?? {};
     final lat = (destination['latitude'] as num?)?.toDouble();
@@ -338,7 +476,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       markerIcon = BitmapDescriptor.defaultMarkerWithHue(_getMarkerHue(index));
     }
     
-    // SIMPLIFIED: Simple info window - cuma nama dan address
+    // Simple info window - cuma nama dan address
     final routeName = route['destination_name'] ?? 'Water Supply ${index + 1}';
     
     return Marker(
@@ -347,7 +485,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       icon: markerIcon,
       infoWindow: InfoWindow(
         title: routeName,
-        snippet: simpleAddress, // SIMPLE: Cuma address sahaja
+        snippet: simpleAddress,
       ),
       onTap: () {
         _onRouteMarkerTap(route, index);
@@ -355,7 +493,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     );
   }
   
-  // SIMPLIFIED: Reporter marker dengan simple address
+  // Reporter marker dengan simple address
   Marker _buildSimpleReporterMarker(ReportModel report) {
     final isSelected = _selectedReport?.id == report.id;
     final reportLat = report.location.latitude;
@@ -374,7 +512,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       icon: BitmapDescriptor.defaultMarkerWithHue(_getReporterMarkerHue(report.waterQuality)),
       infoWindow: InfoWindow(
         title: report.title,
-        snippet: simpleAddress, // SIMPLE: Cuma address sahaja
+        snippet: simpleAddress,
       ),
       onTap: () => _onReporterMarkerTap(report),
     );
@@ -542,66 +680,6 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     );
   }
   
-  void _fitAllRoutes() {
-    if (_mapController == null) return;
-    
-    double minLat = double.infinity;
-    double maxLat = -double.infinity;
-    double minLng = double.infinity;
-    double maxLng = -double.infinity;
-    
-    bool hasValidCoordinates = false;
-    
-    if (widget.currentLocation != null && _shouldShowCurrentLocationMarker()) {
-      minLat = math.min(minLat, widget.currentLocation!.latitude);
-      maxLat = math.max(maxLat, widget.currentLocation!.latitude);
-      minLng = math.min(minLng, widget.currentLocation!.longitude);
-      maxLng = math.max(maxLng, widget.currentLocation!.longitude);
-      hasValidCoordinates = true;
-    }
-    
-    if (widget.polylineRoutes != null) {
-      for (final route in widget.polylineRoutes!) {
-        final polylinePoints = route['polyline_points'] as List<dynamic>?;
-        if (polylinePoints != null) {
-          for (final point in polylinePoints) {
-            if (point is Map<String, dynamic>) {
-              final lat = (point['latitude'] as num?)?.toDouble();
-              final lng = (point['longitude'] as num?)?.toDouble();
-              
-              if (lat != null && lng != null) {
-                minLat = math.min(minLat, lat);
-                maxLat = math.max(maxLat, lat);
-                minLng = math.min(minLng, lng);
-                maxLng = math.max(maxLng, lng);
-                hasValidCoordinates = true;
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    for (final report in widget.reports) {
-      minLat = math.min(minLat, report.location.latitude);
-      maxLat = math.max(maxLat, report.location.latitude);
-      minLng = math.min(minLng, report.location.longitude);
-      maxLng = math.max(maxLng, report.location.longitude);
-      hasValidCoordinates = true;
-    }
-    
-    if (hasValidCoordinates && minLat != double.infinity) {
-      final bounds = LatLngBounds(
-        southwest: LatLng(minLat, minLng),
-        northeast: LatLng(maxLat, maxLng),
-      );
-      
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 50.0),
-      );
-    }
-  }
-  
   Color _getRouteColor(int index) {
     final colors = [
       Colors.red,
@@ -639,88 +717,279 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       return _buildNoDataView();
     }
     
-    return Stack(
-      children: [
-        // Main Google Map
-        GoogleMap(
-          onMapCreated: (GoogleMapController controller) {
-            _mapController = controller;
-            print('🗺️ Google Map created successfully');
-            
-            Future.delayed(Duration(milliseconds: 500), () {
-              _fitAllRoutes();
-            });
-          },
-          initialCameraPosition: CameraPosition(
-            target: widget.reports.isNotEmpty 
-              ? LatLng(widget.reports.first.location.latitude, widget.reports.first.location.longitude)
-              : LatLng(
-                  widget.currentLocation?.latitude ?? 3.1390,
-                  widget.currentLocation?.longitude ?? 101.6869,
-                ),
-            zoom: 12.0,
-          ),
-          markers: _markers,
-          polylines: _polylines,
-          myLocationEnabled: false,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          mapToolbarEnabled: true,
-          compassEnabled: true,
-          mapType: MapType.normal,
-          trafficEnabled: true,
-          onCameraMove: (CameraPosition position) {
-            _currentZoom = position.zoom;
-            if ((_currentZoom < 13.0) != _shouldShowCurrentLocationMarker()) {
+    return GestureDetector(
+      onTap: () {
+        // Show controls when user taps on map
+        _showControlsTemporarily();
+      },
+      child: Stack(
+        children: [
+          // Main Google Map
+          GoogleMap(
+            onMapCreated: (GoogleMapController controller) {
+              _mapController = controller;
+              print('🗺️ Google Map created successfully');
+              
+              Future.delayed(Duration(milliseconds: 500), () {
+                _fitAllRoutes();
+              });
+            },
+            initialCameraPosition: CameraPosition(
+              target: widget.reports.isNotEmpty 
+                ? LatLng(widget.reports.first.location.latitude, widget.reports.first.location.longitude)
+                : LatLng(
+                    widget.currentLocation?.latitude ?? 3.1390,
+                    widget.currentLocation?.longitude ?? 101.6869,
+                  ),
+              zoom: 12.0,
+            ),
+            markers: _markers,
+            polylines: _polylines,
+            myLocationEnabled: false,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false, // Disable default zoom controls
+            mapToolbarEnabled: true,
+            compassEnabled: true,
+            mapType: MapType.normal,
+            trafficEnabled: true,
+            onCameraMove: (CameraPosition position) {
+              _currentZoom = position.zoom;
+              if ((_currentZoom < 13.0) != _shouldShowCurrentLocationMarker()) {
+                _updateMarkersAndPolylines();
+              }
+            },
+            onTap: (LatLng latLng) {
+              setState(() {
+                _selectedRouteIndex = null;
+                _selectedReport = null;
+              });
               _updateMarkersAndPolylines();
-            }
-          },
-          onTap: (LatLng latLng) {
-            setState(() {
-              _selectedRouteIndex = null;
-              _selectedReport = null;
-            });
-            _updateMarkersAndPolylines();
-            widget.onRouteSelected?.call(-1);
-          },
-        ),
-        
-        // SIMPLIFIED: Loading indicator untuk addresses (smaller)
-        if (_loadingAddresses)
-          Positioned(
-            top: 20,
-            right: 20,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(12),
+              widget.onRouteSelected?.call(-1);
+              _showControlsTemporarily();
+            },
+          ),
+          
+          // NEW: Custom Zoom Controls Panel (Right side)
+          AnimatedPositioned(
+            duration: Duration(milliseconds: 300),
+            right: _showZoomControls ? 16 : -80,
+            top: MediaQuery.of(context).padding.top + 80,
+            child: _buildZoomControlsPanel(),
+          ),
+          
+          // NEW: Map Control Buttons (Bottom right)
+          AnimatedPositioned(
+            duration: Duration(milliseconds: 300),
+            right: _showZoomControls ? 16 : -100,
+            bottom: 100,
+            child: _buildMapControlButtons(),
+          ),
+          
+          // NEW: Zoom Level Indicator (Top right)
+          AnimatedPositioned(
+            duration: Duration(milliseconds: 300),
+            right: _showZoomControls ? 16 : -120,
+            top: MediaQuery.of(context).padding.top + 20,
+            child: _buildZoomLevelIndicator(),
+          ),
+          
+          // Loading indicator untuk addresses
+          if (_loadingAddresses)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 20,
+              left: 20,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 1.5,
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Loading addresses...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 1.5,
-                    ),
-                  ),
-                  SizedBox(width: 6),
-                  Text(
-                    'Loading addresses...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+            ),
+        ],
+      ),
+    );
+  }
+  
+  // NEW: Build custom zoom controls panel
+  Widget _buildZoomControlsPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Zoom In Button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _currentZoom < 20.0 ? _zoomIn : null,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+              child: Container(
+                width: 48,
+                height: 48,
+                child: Icon(
+                  Icons.add,
+                  color: _currentZoom < 20.0 ? Colors.blue.shade700 : Colors.grey,
+                  size: 24,
+                ),
               ),
             ),
           ),
+          
+          // Divider
+          Container(
+            height: 1,
+            color: Colors.grey.shade300,
+          ),
+          
+          // Zoom Out Button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _currentZoom > 2.0 ? _zoomOut : null,
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+              child: Container(
+                width: 48,
+                height: 48,
+                child: Icon(
+                  Icons.remove,
+                  color: _currentZoom > 2.0 ? Colors.blue.shade700 : Colors.grey,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // NEW: Build map control buttons
+  Widget _buildMapControlButtons() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Fit All Routes Button
+        _buildControlButton(
+          icon: Icons.center_focus_strong,
+          onTap: _fitAllRoutes,
+          tooltip: 'Fit All Routes',
+          color: Colors.green,
+        ),
+        
+        SizedBox(height: 8),
+        
+        // My Location Button
+        if (widget.currentLocation != null)
+          _buildControlButton(
+            icon: Icons.my_location,
+            onTap: _goToCurrentLocation,
+            tooltip: 'My Location',
+            color: Colors.blue,
+          ),
       ],
+    );
+  }
+  
+  // NEW: Build individual control button
+  Widget _buildControlButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+    required Color color,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(24),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  // NEW: Build zoom level indicator
+  Widget _buildZoomLevelIndicator() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.zoom_in,
+            color: Colors.white,
+            size: 14,
+          ),
+          SizedBox(width: 6),
+          Text(
+            '${_currentZoom.toStringAsFixed(1)}x',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
   

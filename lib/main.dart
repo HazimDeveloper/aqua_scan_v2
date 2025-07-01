@@ -12,8 +12,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // REMOVED: Firebase initialization completely
-  // No Firebase needed for local storage version
-  
+
   runApp(MyApp());
 }
 

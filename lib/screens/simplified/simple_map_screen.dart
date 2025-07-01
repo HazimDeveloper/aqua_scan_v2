@@ -27,9 +27,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
   
   // 🔑 GOOGLE MAPS API KEY - Replace with your actual API key
   static const String _googleMapsApiKey = 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY';
-  //                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  //                                       PUT YOUR REAL API KEY HERE
-  
+
   AnimationController? _animationController;
   Animation<double>? _fadeAnimation;
   
@@ -369,7 +367,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       print('🗺️ Calling Google Directions API for route $index...');
       
       // Check if API key is set
-      if (_googleMapsApiKey == 'YOUR_ACTUAL_GOOGLE_MAPS_API_KEY_HERE') {
+      if (_googleMapsApiKey == 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY') {
         print('⚠️ Google API key not configured, using simulation');
         return await _createSimulatedRoute(start, end, destination, index);
       }
