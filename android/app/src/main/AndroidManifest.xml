@@ -6,7 +6,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    
+    <!-- ADDED: Network state permissions for geocoding -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="aquascan_v2"
@@ -15,6 +17,9 @@
         <meta-data 
     android:name="com.google.android.geo.API_KEY"
     android:value="AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY"/>
+        <meta-data
+    android:name="android.webkit.WebView.EnableSafeBrowsing"
+    android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

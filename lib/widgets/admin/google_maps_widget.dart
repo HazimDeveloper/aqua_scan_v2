@@ -1,8 +1,9 @@
-// lib/widgets/admin/google_maps_widget.dart - ENHANCED: Auto Info Window untuk Nearest Route
+// lib/widgets/admin/google_maps_widget.dart - SIMPLIFIED: Simple Address Only Info Windows
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../models/report_model.dart';
 import '../../services/api_service.dart';
 
@@ -45,16 +46,18 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   // UI State
   int? _selectedRouteIndex;
   ReportModel? _selectedReport;
-  Map<String, dynamic>? _selectedRoute;
-  bool _showRouteDetails = false;
-  bool _showReporterDetails = false;
   double _currentZoom = 12.0;
+  
+  // SIMPLIFIED: Address Cache untuk performance
+  final Map<String, String> _addressCache = {};
+  bool _loadingAddresses = false;
   
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _selectedRouteIndex = widget.selectedRouteIndex;
+    _preloadAddresses(); // Load addresses in background
     _updateMarkersAndPolylines();
   }
   
@@ -65,6 +68,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         oldWidget.selectedRouteIndex != widget.selectedRouteIndex ||
         oldWidget.reports != widget.reports) {
       _selectedRouteIndex = widget.selectedRouteIndex;
+      _preloadAddresses();
       _updateMarkersAndPolylines();
     }
   }
@@ -96,24 +100,165 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     );
   }
   
+  // SIMPLIFIED: Preload addresses untuk semua locations
+  Future<void> _preloadAddresses() async {
+    if (_loadingAddresses) return;
+    
+    setState(() {
+      _loadingAddresses = true;
+    });
+    
+    try {
+      print('📍 Loading simple addresses for all locations...');
+      
+      List<Future<void>> addressFutures = [];
+      
+      // Load current location address
+      if (widget.currentLocation != null) {
+        final currentKey = '${widget.currentLocation!.latitude},${widget.currentLocation!.longitude}';
+        if (!_addressCache.containsKey(currentKey)) {
+          addressFutures.add(_loadSimpleAddressForLocation(
+            widget.currentLocation!.latitude,
+            widget.currentLocation!.longitude,
+            'Current Location'
+          ));
+        }
+      }
+      
+      // Load route destination addresses
+      if (widget.polylineRoutes != null) {
+        for (final route in widget.polylineRoutes!) {
+          final destination = route['destination_details'] as Map<String, dynamic>? ?? {};
+          final lat = (destination['latitude'] as num?)?.toDouble();
+          final lng = (destination['longitude'] as num?)?.toDouble();
+          
+          if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+            final routeKey = '$lat,$lng';
+            if (!_addressCache.containsKey(routeKey)) {
+              final name = route['destination_name'] ?? 'Water Supply';
+              addressFutures.add(_loadSimpleAddressForLocation(lat, lng, name));
+            }
+          }
+        }
+      }
+      
+      // Load report addresses
+      for (final report in widget.reports) {
+        final reportKey = '${report.location.latitude},${report.location.longitude}';
+        if (!_addressCache.containsKey(reportKey)) {
+          addressFutures.add(_loadSimpleAddressForLocation(
+            report.location.latitude,
+            report.location.longitude,
+            report.title
+          ));
+        }
+      }
+      
+      // Execute all address loading in parallel
+      await Future.wait(addressFutures);
+      
+      print('✅ Simple address loading completed. Cache size: ${_addressCache.length}');
+      
+      // Update markers dengan addresses yang baru loaded
+      if (mounted) {
+        _updateMarkersAndPolylines();
+      }
+      
+    } catch (e) {
+      print('⚠️ Error loading simple addresses: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingAddresses = false;
+        });
+      }
+    }
+  }
+  
+  // SIMPLIFIED: Load simple address untuk specific location
+  Future<void> _loadSimpleAddressForLocation(double lat, double lng, String fallbackName) async {
+    final key = '$lat,$lng';
+    
+    try {
+      final address = await _getSimpleAddressFromCoordinates(lat, lng);
+      if (mounted) {
+        setState(() {
+          _addressCache[key] = address;
+        });
+      }
+      print('📍 Simple address loaded for $fallbackName: $address');
+    } catch (e) {
+      print('⚠️ Failed to load address for $fallbackName: $e');
+      // Use fallback address
+      if (mounted) {
+        setState(() {
+          _addressCache[key] = 'Near $fallbackName';
+        });
+      }
+    }
+  }
+  
+  // SIMPLIFIED: Get simple address dari coordinates
+  Future<String> _getSimpleAddressFromCoordinates(double latitude, double longitude) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(latitude, longitude);
+      
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        
+        // SIMPLIFIED: Build simple address (cuma main parts sahaja)
+        List<String> addressParts = [];
+        
+        if (place.street != null && place.street!.isNotEmpty) {
+          addressParts.add(place.street!);
+        }
+        
+        if (place.locality != null && place.locality!.isNotEmpty) {
+          addressParts.add(place.locality!);
+        }
+        
+        if (place.administrativeArea != null && place.administrativeArea!.isNotEmpty) {
+          addressParts.add(place.administrativeArea!);
+        }
+        
+        if (addressParts.isNotEmpty) {
+          return addressParts.join(', ');
+        } else {
+          return 'Location at ${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
+        }
+      }
+      
+      return 'Unknown location';
+    } catch (e) {
+      print('Geocoding error: $e');
+      return 'Location at ${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
+    }
+  }
+  
+  // SIMPLIFIED: Get cached address atau loading message
+  String _getCachedAddress(double lat, double lng, {String fallback = 'Loading address...'}) {
+    final key = '$lat,$lng';
+    return _addressCache[key] ?? fallback;
+  }
+  
   void _updateMarkersAndPolylines() {
     final newMarkers = <Marker>{};
     final newPolylines = <Polyline>{};
     
     print('🗺️ Updating map with ${widget.polylineRoutes?.length ?? 0} routes and ${widget.reports.length} reports');
     
-    // Add current location marker only if needed
+    // Add current location marker with simple address
     if (widget.currentLocation != null && _shouldShowCurrentLocationMarker()) {
-      newMarkers.add(_buildCurrentLocationMarker());
+      newMarkers.add(_buildSimpleCurrentLocationMarker());
     }
     
-    // Add route markers and polylines
+    // Add route markers and polylines with simple addresses
     if (widget.polylineRoutes != null) {
       for (int i = 0; i < widget.polylineRoutes!.length; i++) {
         final route = widget.polylineRoutes![i];
         
-        // Add destination marker with enhanced info window
-        final marker = _buildEnhancedRouteMarker(route, i);
+        // Add destination marker with simple address info
+        final marker = _buildSimpleRouteMarker(route, i);
         if (marker != null) {
           newMarkers.add(marker);
         }
@@ -126,9 +271,9 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       }
     }
     
-    // Add reporter markers
+    // Add reporter markers with simple addresses
     for (final report in widget.reports) {
-      newMarkers.add(_buildReporterMarker(report));
+      newMarkers.add(_buildSimpleReporterMarker(report));
     }
     
     if (mounted) {
@@ -137,7 +282,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         _polylines = newPolylines;
       });
       
-      print('✅ Map updated: ${_markers.length} markers (${widget.reports.length} reporters), ${_polylines.length} polylines');
+      print('✅ Map updated: ${_markers.length} markers, ${_polylines.length} polylines');
     }
   }
   
@@ -147,23 +292,25 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
            _currentZoom < 13.0;
   }
   
-  Marker _buildCurrentLocationMarker() {
+  // SIMPLIFIED: Current location marker dengan simple address
+  Marker _buildSimpleCurrentLocationMarker() {
+    final currentLat = widget.currentLocation!.latitude;
+    final currentLng = widget.currentLocation!.longitude;
+    final address = _getCachedAddress(currentLat, currentLng, fallback: 'Getting address...');
+    
     return Marker(
       markerId: const MarkerId('current_location'),
-      position: LatLng(
-        widget.currentLocation!.latitude,
-        widget.currentLocation!.longitude,
-      ),
+      position: LatLng(currentLat, currentLng),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       infoWindow: InfoWindow(
-        title: '📍 Admin Location',
-        snippet: 'Current GPS position (${widget.reports.isEmpty ? "no reports" : "${widget.reports.length} reports"})',
+        title: 'Your Location',
+        snippet: address, // SIMPLE: Cuma address sahaja
       ),
     );
   }
   
-  // ENHANCED: Route marker dengan auto info window untuk nearest
-  Marker? _buildEnhancedRouteMarker(Map<String, dynamic> route, int index) {
+  // SIMPLIFIED: Route marker dengan simple address info sahaja
+  Marker? _buildSimpleRouteMarker(Map<String, dynamic> route, int index) {
     final destination = route['destination_details'] as Map<String, dynamic>? ?? {};
     final lat = (destination['latitude'] as num?)?.toDouble();
     final lng = (destination['longitude'] as num?)?.toDouble();
@@ -174,92 +321,63 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     
     final isSelected = _selectedRouteIndex == index;
     final isShortest = route['is_shortest'] == true;
-    final isNearest = route['is_nearest'] == true; // NEW: Check if nearest
-    final showInfoWindow = route['show_info_window'] == true; // NEW: Auto show info window
+    final isNearest = route['is_nearest'] == true;
     
-    // Determine marker color and icon
+    // Get simple address dari cache
+    final simpleAddress = _getCachedAddress(lat, lng, fallback: 'Loading address...');
+    
+    // Determine marker color
     BitmapDescriptor markerIcon;
     if (isNearest) {
-      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed); // Red for nearest
+      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
     } else if (isShortest) {
-      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen); // Green for shortest
+      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
     } else if (isSelected) {
-      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue); // Blue for selected
+      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
     } else {
       markerIcon = BitmapDescriptor.defaultMarkerWithHue(_getMarkerHue(index));
     }
     
-    // Build info window
-    InfoWindow infoWindow;
-    if (showInfoWindow && isNearest) {
-      // ENHANCED: Special info window for nearest route
-      infoWindow = InfoWindow(
-        title: route['info_window_title'] ?? '🎯 NEAREST ROUTE',
-        snippet: route['info_window_snippet'] ?? _buildNearestRouteSnippet(route, index),
-        onTap: () => _onRouteMarkerTap(route, index),
-      );
-    } else {
-      // Standard info window
-      infoWindow = InfoWindow(
-        title: _buildRouteTitle(route, index, isShortest, isNearest),
-        snippet: _buildRouteSnippet(route, index, isShortest, isNearest),
-        onTap: () => _onRouteMarkerTap(route, index),
-      );
-    }
+    // SIMPLIFIED: Simple info window - cuma nama dan address
+    final routeName = route['destination_name'] ?? 'Water Supply ${index + 1}';
     
     return Marker(
       markerId: MarkerId('route_$index'),
       position: LatLng(lat, lng),
       icon: markerIcon,
-      infoWindow: infoWindow,
+      infoWindow: InfoWindow(
+        title: routeName,
+        snippet: simpleAddress, // SIMPLE: Cuma address sahaja
+      ),
       onTap: () {
         _onRouteMarkerTap(route, index);
       },
     );
   }
   
-  // NEW: Build enhanced title for route markers
-  String _buildRouteTitle(Map<String, dynamic> route, int index, bool isShortest, bool isNearest) {
-    String title = route['destination_name'] ?? 'Water Supply ${index + 1}';
+  // SIMPLIFIED: Reporter marker dengan simple address
+  Marker _buildSimpleReporterMarker(ReportModel report) {
+    final isSelected = _selectedReport?.id == report.id;
+    final reportLat = report.location.latitude;
+    final reportLng = report.location.longitude;
     
-    if (isNearest) {
-      return '🎯 $title';
-    } else if (isShortest) {
-      return '🌟 $title';
-    }
+    // Get simple address untuk report location
+    final simpleAddress = _getCachedAddress(
+      reportLat, 
+      reportLng, 
+      fallback: report.address.isNotEmpty ? report.address : 'Loading address...'
+    );
     
-    return title;
-  }
-  
-  // NEW: Build enhanced snippet for route markers
-  String _buildRouteSnippet(Map<String, dynamic> route, int index, bool isShortest, bool isNearest) {
-    final distance = '${(route['distance'] as num?)?.toStringAsFixed(1) ?? '?'}km';
-    final time = route['travel_time'] ?? '? min';
-    
-    String snippet = '$distance • $time';
-    
-    if (isNearest) {
-      snippet += ' • 🎯 NEAREST & RECOMMENDED';
-    } else if (isShortest) {
-      snippet += ' • 🏆 SHORTEST ROUTE';
-    }
-    
-    final routeSource = route['route_source'] as String?;
-    if (routeSource == 'google_directions_api') {
-      snippet += ' • 🗺️ Google';
-    } else if (routeSource == 'genetic_algorithm') {
-      snippet += ' • 🧬 AI Optimized';
-    }
-    
-    return snippet;
-  }
-  
-  // NEW: Build special snippet for nearest route
-  String _buildNearestRouteSnippet(Map<String, dynamic> route, int index) {
-    final distance = '${(route['distance'] as num?)?.toStringAsFixed(1) ?? '?'}km';
-    final time = route['travel_time'] ?? '? min';
-    
-    return '$distance away • $time drive • RECOMMENDED ROUTE';
+    return Marker(
+      markerId: MarkerId('reporter_${report.id}'),
+      position: LatLng(reportLat, reportLng),
+      icon: BitmapDescriptor.defaultMarkerWithHue(_getReporterMarkerHue(report.waterQuality)),
+      infoWindow: InfoWindow(
+        title: report.title,
+        snippet: simpleAddress, // SIMPLE: Cuma address sahaja
+      ),
+      onTap: () => _onReporterMarkerTap(report),
+    );
   }
   
   Polyline? _buildRoutePolyline(Map<String, dynamic> route, int index) {
@@ -288,7 +406,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     
     final isSelected = _selectedRouteIndex == index;
     final isShortest = route['is_shortest'] == true;
-    final isNearest = route['is_nearest'] == true; // NEW: Check nearest
+    final isNearest = route['is_nearest'] == true;
     
     Color routeColor;
     int strokeWidth;
@@ -296,11 +414,10 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     List<PatternItem> patterns = [];
     
     if (isNearest) {
-      // ENHANCED: Special styling for nearest route
-      routeColor = Colors.red.shade600; // Bright red for nearest
+      routeColor = Colors.red.shade600;
       strokeWidth = 8;
       opacity = 1.0;
-      patterns = [PatternItem.dash(20), PatternItem.gap(10)]; // Special dashed pattern
+      patterns = [PatternItem.dash(20), PatternItem.gap(10)];
     } else if (isShortest) {
       routeColor = Colors.green;
       strokeWidth = 6;
@@ -327,21 +444,6 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     );
   }
   
-  Marker _buildReporterMarker(ReportModel report) {
-    final isSelected = _selectedReport?.id == report.id;
-    
-    return Marker(
-      markerId: MarkerId('reporter_${report.id}'),
-      position: LatLng(report.location.latitude, report.location.longitude),
-      icon: BitmapDescriptor.defaultMarkerWithHue(_getReporterMarkerHue(report.waterQuality)),
-      infoWindow: InfoWindow(
-        title: '📋 ${report.title}',
-        snippet: 'By: ${report.userName} • ${_getWaterQualityDisplayName(report.waterQuality)}',
-      ),
-      onTap: () => _onReporterMarkerTap(report),
-    );
-  }
-  
   double _getReporterMarkerHue(WaterQualityState quality) {
     switch (quality) {
       case WaterQualityState.optimum:
@@ -361,38 +463,13 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     }
   }
   
-  String _getWaterQualityDisplayName(WaterQualityState quality) {
-    switch (quality) {
-      case WaterQualityState.optimum:
-        return 'Optimum Quality';
-      case WaterQualityState.highPh:
-        return 'High pH';
-      case WaterQualityState.lowPh:
-        return 'Low pH';
-      case WaterQualityState.highPhTemp:
-        return 'High pH & Temp';
-      case WaterQualityState.lowTemp:
-        return 'Low Temperature';
-      case WaterQualityState.lowTempHighPh:
-        return 'Low Temp & High pH';
-      case WaterQualityState.unknown:
-      default:
-        return 'Contaminated Water';
-    }
-  }
-  
   void _onRouteMarkerTap(Map<String, dynamic> route, int index) {
     setState(() {
       if (_selectedRouteIndex == index) {
         _selectedRouteIndex = null;
-        _selectedRoute = null;
-        _showRouteDetails = false;
       } else {
         _selectedRouteIndex = index;
-        _selectedRoute = route;
-        _showRouteDetails = true;
         _selectedReport = null;
-        _showReporterDetails = false;
       }
     });
     
@@ -405,13 +482,9 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
     setState(() {
       if (_selectedReport?.id == report.id) {
         _selectedReport = null;
-        _showReporterDetails = false;
       } else {
         _selectedReport = report;
-        _showReporterDetails = true;
         _selectedRouteIndex = null;
-        _selectedRoute = null;
-        _showRouteDetails = false;
       }
     });
     
@@ -566,50 +639,88 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       return _buildNoDataView();
     }
     
-    return GoogleMap(
-      onMapCreated: (GoogleMapController controller) {
-        _mapController = controller;
-        print('🗺️ Google Map created successfully');
+    return Stack(
+      children: [
+        // Main Google Map
+        GoogleMap(
+          onMapCreated: (GoogleMapController controller) {
+            _mapController = controller;
+            print('🗺️ Google Map created successfully');
+            
+            Future.delayed(Duration(milliseconds: 500), () {
+              _fitAllRoutes();
+            });
+          },
+          initialCameraPosition: CameraPosition(
+            target: widget.reports.isNotEmpty 
+              ? LatLng(widget.reports.first.location.latitude, widget.reports.first.location.longitude)
+              : LatLng(
+                  widget.currentLocation?.latitude ?? 3.1390,
+                  widget.currentLocation?.longitude ?? 101.6869,
+                ),
+            zoom: 12.0,
+          ),
+          markers: _markers,
+          polylines: _polylines,
+          myLocationEnabled: false,
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
+          mapToolbarEnabled: true,
+          compassEnabled: true,
+          mapType: MapType.normal,
+          trafficEnabled: true,
+          onCameraMove: (CameraPosition position) {
+            _currentZoom = position.zoom;
+            if ((_currentZoom < 13.0) != _shouldShowCurrentLocationMarker()) {
+              _updateMarkersAndPolylines();
+            }
+          },
+          onTap: (LatLng latLng) {
+            setState(() {
+              _selectedRouteIndex = null;
+              _selectedReport = null;
+            });
+            _updateMarkersAndPolylines();
+            widget.onRouteSelected?.call(-1);
+          },
+        ),
         
-        Future.delayed(Duration(milliseconds: 500), () {
-          _fitAllRoutes();
-        });
-      },
-      initialCameraPosition: CameraPosition(
-        target: widget.reports.isNotEmpty 
-          ? LatLng(widget.reports.first.location.latitude, widget.reports.first.location.longitude)
-          : LatLng(
-              widget.currentLocation?.latitude ?? 3.1390,
-              widget.currentLocation?.longitude ?? 101.6869,
+        // SIMPLIFIED: Loading indicator untuk addresses (smaller)
+        if (_loadingAddresses)
+          Positioned(
+            top: 20,
+            right: 20,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 1.5,
+                    ),
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    'Loading addresses...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
-        zoom: 12.0,
-      ),
-      markers: _markers,
-      polylines: _polylines,
-      myLocationEnabled: false,
-      myLocationButtonEnabled: false,
-      zoomControlsEnabled: false,
-      mapToolbarEnabled: true,
-      compassEnabled: true,
-      mapType: MapType.normal,
-      trafficEnabled: true,
-      onCameraMove: (CameraPosition position) {
-        _currentZoom = position.zoom;
-        if ((_currentZoom < 13.0) != _shouldShowCurrentLocationMarker()) {
-          _updateMarkersAndPolylines();
-        }
-      },
-      onTap: (LatLng latLng) {
-        setState(() {
-          _selectedRouteIndex = null;
-          _selectedRoute = null;
-          _showRouteDetails = false;
-          _selectedReport = null;
-          _showReporterDetails = false;
-        });
-        _updateMarkersAndPolylines();
-        widget.onRouteSelected?.call(-1);
-      },
+          ),
+      ],
     );
   }
   

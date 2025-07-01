@@ -201,7 +201,7 @@ Future<Map<String, dynamic>> getActualDrivingRoutes(
   int maxRoutes = 20,
 }) async {
   try {
-    print('🚗 Getting actual driving routes from backend...');
+    print('🚗 Getting actual routes from backend...');
     
     final response = await http.get(
       Uri.parse('$baseUrl/water-supply-points-with-routes').replace(
@@ -221,7 +221,7 @@ Future<Map<String, dynamic>> getActualDrivingRoutes(
       if (data['success'] == true) {
         final routes = data['routes'] as List<dynamic>;
         
-        print('✅ Got ${routes.length} actual driving routes');
+        print('✅ Got ${routes.length} actual routes');
         
         return {
           'success': true,
@@ -232,11 +232,11 @@ Future<Map<String, dynamic>> getActualDrivingRoutes(
       }
     }
     
-    throw Exception('Failed to get driving routes: ${response.body}');
+    throw Exception('Failed to get  routes: ${response.body}');
     
   } catch (e) {
-    print('❌ Actual driving routes error: $e');
-    throw Exception('Failed to get actual driving routes: $e');
+    print('❌ Actual  routes error: $e');
+    throw Exception('Failed to get actual  routes: $e');
   }
 }
 
