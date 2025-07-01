@@ -21,7 +21,7 @@ class WaterQualityUtils {
         return 'Low Temp & High pH';
       case WaterQualityState.unknown:
       default:
-        return 'Contaminated';
+        return '';
     }
   }
   
