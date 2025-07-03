@@ -152,7 +152,7 @@ class ApiService {
   final String baseUrl;
   
   // Google Maps API configuration
-  static const String _googleMapsApiKey = 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY';
+  static const String _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
   static const String _googleMapsBaseUrl = 'https://maps.googleapis.com/maps/api';
   
   ApiService({required this.baseUrl});

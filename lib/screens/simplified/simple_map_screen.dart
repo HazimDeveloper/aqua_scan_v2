@@ -26,7 +26,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     with TickerProviderStateMixin {
   
   // 🔑 GOOGLE MAPS API KEY - Replace with your actual API key
-  static const String _googleMapsApiKey = 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY';
+  static const String _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
 
   AnimationController? _animationController;
   Animation<double>? _fadeAnimation;
@@ -367,7 +367,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       print('🗺️ Calling Google Directions API for route $index...');
       
       // Check if API key is set
-      if (_googleMapsApiKey == 'AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY') {
+      if (_googleMapsApiKey == 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg') {
         print('⚠️ Google API key not configured, using simulation');
         return await _createSimulatedRoute(start, end, destination, index);
       }

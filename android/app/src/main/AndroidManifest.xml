@@ -16,7 +16,7 @@
         android:icon="@mipmap/ic_launcher">
         <meta-data 
     android:name="com.google.android.geo.API_KEY"
-    android:value="AIzaSyAwwgmqAxzQmdmjNQ-vklZnvVdZjkWLcTY"/>
+    android:value="AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg"/>
         <meta-data
     android:name="android.webkit.WebView.EnableSafeBrowsing"
     android:value="false" />
