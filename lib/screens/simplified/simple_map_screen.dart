@@ -1,4 +1,4 @@
-// lib/screens/simplified/simple_map_screen.dart - SIMPLIFIED: API Key + Simple Address Info Windows
+// lib/screens/simplified/simple_map_screen.dart - FIXED: Google API Key Logic
 import 'dart:io';
 import 'package:aquascan_v2/widgets/admin/google_maps_widget.dart';
 import 'package:flutter/material.dart';
@@ -25,8 +25,11 @@ class SimpleMapScreen extends StatefulWidget {
 class _SimpleMapScreenState extends State<SimpleMapScreen> 
     with TickerProviderStateMixin {
   
-  // 🔑 GOOGLE MAPS API KEY - Replace with your actual API key
-  static const String _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
+  // 🔑 GOOGLE MAPS API KEY - Set to null if you don't have a real key
+  // static const String? _googleMapsApiKey = null; // Set to your real API key or keep as null
+  
+  // Alternative: If you have a real key, replace null with your key:
+  static const String? _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
 
   AnimationController? _animationController;
   Animation<double>? _fadeAnimation;
@@ -72,7 +75,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     _apiService = Provider.of<ApiService>(context, listen: false);
     _databaseService = Provider.of<DatabaseService>(context, listen: false);
     
-    _initializeGoogleDrivingRoutes();
+    _initializeMapRoutes();
     _animationController?.forward();
   }
   
@@ -82,7 +85,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     super.dispose();
   }
   
-  Future<void> _initializeGoogleDrivingRoutes() async {
+  Future<void> _initializeMapRoutes() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -91,7 +94,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     });
     
     try {
-      print('🚗 === GOOGLE ROUTES INITIALIZATION ===');
+      print('🚗 === MAP ROUTES INITIALIZATION ===');
       
       // STEP 1: Test backend connection
       setState(() => _routeLoadingStatus = 'Testing AI backend...');
@@ -125,10 +128,10 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       // STEP 3: Load reports
       await _loadUserReports();
       
-      // STEP 4: Get driving routes
-      await _loadRealGoogleDrivingRoutes();
+      // STEP 4: Get routes with improved logic
+      await _loadOptimizedRoutes();
       
-      print('✅ === GOOGLE ROUTES READY ===');
+      print('✅ === MAP ROUTES READY ===');
       
     } catch (e) {
       print('❌ Initialization failed: $e');
@@ -158,21 +161,21 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     }
   }
   
-  Future<void> _loadRealGoogleDrivingRoutes() async {
+  Future<void> _loadOptimizedRoutes() async {
     if (_currentLocation == null) return;
     
     setState(() {
       _isLoadingRoutes = true;
-      _routeLoadingStatus = 'Getting real routes...';
+      _routeLoadingStatus = 'Getting optimized routes...';
     });
     
     try {
-      print('🗺️ Loading REAL Google Maps  routes...');
+      print('🗺️ Loading optimized routes...');
       
       List<Map<String, dynamic>> routeData = [];
       String method = 'unknown';
       
-      // PRIORITY 1: Backend + Google Maps (BEST)
+      // PRIORITY 1: Backend + Google Maps (if backend available and API key configured)
       if (_backendConnected) {
         setState(() => _routeLoadingStatus = 'Using AI + Google Maps...');
         try {
@@ -194,8 +197,8 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
         }
       }
       
-      // PRIORITY 2: Direct Google Maps Directions API
-      if (routeData.isEmpty) {
+      // PRIORITY 2: Direct Google Maps Directions API (only if we have a real API key)
+      if (routeData.isEmpty && _googleMapsApiKey != null && _googleMapsApiKey!.isNotEmpty) {
         setState(() => _routeLoadingStatus = 'Using Google Directions API...');
         try {
           routeData = await _getDirectGoogleDirections();
@@ -206,15 +209,19 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
         }
       }
       
-      // PRIORITY 3: Enhanced simulation
+      // PRIORITY 3: Enhanced simulation (always available as fallback)
       if (routeData.isEmpty) {
-        setState(() => _routeLoadingStatus = 'Using route simulation...');
+        setState(() => _routeLoadingStatus = 'Using enhanced simulation...');
         try {
-          routeData = await _getSimulationRoutes();
-          method = 'Route Simulation';
-          print('✅ SUCCESS: Simulation routes');
+          routeData = await _getEnhancedSimulationRoutes();
+          method = 'Enhanced Route Simulation';
+          print('✅ SUCCESS: Enhanced simulation routes');
         } catch (e) {
-          print('⚠️ Simulation failed: $e');
+          print('⚠️ Enhanced simulation failed: $e');
+          // Final fallback: Basic simulation
+          routeData = await _getBasicSimulationRoutes();
+          method = 'Basic Simulation';
+          print('✅ FALLBACK: Basic simulation routes');
         }
       }
       
@@ -260,7 +267,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     }
   }
   
-  // SIMPLIFIED: Process Google routes dengan simple data structure
+  // FIXED: Process Google routes with simple data structure
   Future<List<Map<String, dynamic>>> _processGoogleRoutesSimple(List<dynamic> backendRoutes) async {
     final processedRoutes = <Map<String, dynamic>>[];
     
@@ -284,7 +291,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       
       if (polylinePoints.isNotEmpty) {
         processedRoutes.add({
-          'route_id': 'google_ga_$i',
+          'route_id': 'google_backend_$i',
           'destination_name': route['destination_name'] ?? 'Water Supply ${i + 1}',
           'destination_address': route['destination_address'] ?? 'Google Route',
           'distance': (route['distance_km'] as num?)?.toDouble() ?? 0.0,
@@ -296,8 +303,8 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
           'is_shortest': i == 0,
           'priority_rank': i + 1,
           'destination_details': route['destination_details'] ?? {},
-          'route_type': 'google_maps_ga',
-          'route_source': 'backend_google_ga',
+          'route_type': 'google_maps_backend',
+          'route_source': 'backend_google',
         });
       }
     }
@@ -305,9 +312,15 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     return processedRoutes;
   }
   
-  // SIMPLIFIED: Direct Google Directions API
+  // FIXED: Direct Google Directions API (only if API key is available)
   Future<List<Map<String, dynamic>>> _getDirectGoogleDirections() async {
+    if (_googleMapsApiKey == null || _googleMapsApiKey!.isEmpty) {
+      throw Exception('Google Maps API key not configured');
+    }
+    
     try {
+      print('🗺️ Using Direct Google Directions API...');
+      
       // Get water supply destinations
       final csvResult = await _apiService.getAllWaterSupplyPointsFromCSV();
       final points = csvResult['points'] as List<dynamic>;
@@ -324,10 +337,9 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
         final lng = (point['longitude'] as num?)?.toDouble();
         
         if (lat != null && lng != null) {
-          setState(() => _routeLoadingStatus = 'Getting route ${i + 1}/${nearestPoints.length}...');
+          setState(() => _routeLoadingStatus = 'Getting Google route ${i + 1}/${nearestPoints.length}...');
           
           try {
-            // Call Google Directions API with our API key
             final googleRoute = await _callGoogleDirectionsAPI(
               _currentLocation!,
               GeoPoint(latitude: lat, longitude: lng),
@@ -356,7 +368,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     }
   }
   
-  // CALL GOOGLE DIRECTIONS API dengan our API key
+  // FIXED: Call Google Directions API with proper key check
   Future<Map<String, dynamic>?> _callGoogleDirectionsAPI(
     GeoPoint start,
     GeoPoint end,
@@ -366,8 +378,8 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     try {
       print('🗺️ Calling Google Directions API for route $index...');
       
-      // Check if API key is set
-      if (_googleMapsApiKey == 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg') {
+      // Check if API key is properly configured
+      if (_googleMapsApiKey == null || _googleMapsApiKey!.isEmpty) {
         print('⚠️ Google API key not configured, using simulation');
         return await _createSimulatedRoute(start, end, destination, index);
       }
@@ -434,6 +446,263 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     }
   }
   
+  // Enhanced simulation routes as improved fallback
+  Future<List<Map<String, dynamic>>> _getEnhancedSimulationRoutes() async {
+    try {
+      print('🧮 Getting enhanced simulation routes...');
+      
+      final csvData = await _apiService.getAllWaterSupplyPointsFromCSV();
+      final points = csvData['points'] as List<dynamic>;
+      
+      if (points.isEmpty) {
+        throw Exception('No water supply points in CSV data');
+      }
+      
+      final routes = <Map<String, dynamic>>[];
+      final maxRoutes = Math.min(12, points.length);
+      
+      for (int i = 0; i < maxRoutes; i++) {
+        final point = points[i];
+        final lat = (point['latitude'] as num?)?.toDouble();
+        final lng = (point['longitude'] as num?)?.toDouble();
+        
+        if (lat != null && lng != null) {
+          setState(() => _routeLoadingStatus = 'Creating enhanced route ${i + 1}/$maxRoutes...');
+          
+          final destinationLocation = GeoPoint(latitude: lat, longitude: lng);
+          
+          final route = await _createEnhancedSimulatedRoute(
+            _currentLocation!, 
+            destinationLocation,
+            point,
+            i,
+          );
+          
+          routes.add(route);
+        }
+      }
+      
+      // Sort by distance
+      routes.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
+      
+      print('✅ Generated ${routes.length} enhanced simulation routes');
+      
+      return routes;
+      
+    } catch (e) {
+      print('❌ Enhanced simulation error: $e');
+      throw Exception('Enhanced route simulation failed: $e');
+    }
+  }
+  
+  // Basic simulation as final fallback
+  Future<List<Map<String, dynamic>>> _getBasicSimulationRoutes() async {
+    try {
+      print('🔄 Using basic simulation as final fallback...');
+      
+      final routes = <Map<String, dynamic>>[];
+      
+      // Create some basic routes around current location
+      final baseDistance = 5.0; // 5km radius
+      
+      for (int i = 0; i < 6; i++) {
+        final angle = (i * 60.0) * (Math.pi / 180); // 60 degrees apart
+        final distance = baseDistance + (i * 2.0);
+        
+        final lat = _currentLocation!.latitude + (distance / 111.0) * Math.cos(angle);
+        final lng = _currentLocation!.longitude + (distance / (111.0 * Math.cos(_currentLocation!.latitude * Math.pi / 180))) * Math.sin(angle);
+        
+        final destination = GeoPoint(latitude: lat, longitude: lng);
+        
+        final route = await _createSimulatedRoute(
+          _currentLocation!,
+          destination,
+          {
+            'street_name': 'Water Station ${String.fromCharCode(65 + i)}',
+            'address': 'Simulated Location ${i + 1}',
+          },
+          i,
+        );
+        
+        routes.add(route);
+      }
+      
+      print('✅ Generated ${routes.length} basic simulation routes');
+      return routes;
+      
+    } catch (e) {
+      print('❌ Basic simulation error: $e');
+      return [];
+    }
+  }
+  
+  // Create enhanced simulated route with better road simulation
+  Future<Map<String, dynamic>> _createEnhancedSimulatedRoute(
+    GeoPoint start,
+    GeoPoint end,
+    Map<String, dynamic> destination,
+    int index,
+  ) async {
+    final distance = _calculateDistance(start.latitude, start.longitude, end.latitude, end.longitude);
+    
+    // Create realistic road route with multiple waypoints
+    final roadPolyline = _generateEnhancedRoadPolyline(start, end, distance);
+    
+    // Calculate realistic metrics
+    final roadDistance = distance * _getRoadFactor(distance);
+    final drivingTime = _calculateEnhancedDrivingTime(roadDistance);
+    
+    return {
+      'route_id': 'enhanced_sim_$index',
+      'destination_name': destination['street_name'] ?? 'Water Supply ${index + 1}',
+      'destination_address': destination['address'] ?? 'Enhanced Simulated Route',
+      'distance': roadDistance,
+      'travel_time': drivingTime,
+      'polyline_points': roadPolyline,
+      'color': index == 0 ? '#FF6600' : '#0099FF',
+      'weight': index == 0 ? 5 : 3,
+      'opacity': 0.8,
+      'is_shortest': index == 0,
+      'priority_rank': index + 1,
+      'destination_details': {
+        'id': 'enhanced_sim_dest_$index',
+        'latitude': end.latitude,
+        'longitude': end.longitude,
+        'name': destination['street_name'] ?? 'Water Supply ${index + 1}',
+        'address': destination['address'] ?? 'Unknown Address',
+        'accessible_by_car': true,
+      },
+      'route_type': 'enhanced_simulation',
+      'route_source': 'enhanced_simulation',
+    };
+  }
+  
+  // Generate enhanced road-following polyline
+  List<Map<String, dynamic>> _generateEnhancedRoadPolyline(GeoPoint start, GeoPoint end, double distance) {
+    final points = <Map<String, dynamic>>[];
+    
+    points.add({
+      'latitude': start.latitude,
+      'longitude': start.longitude,
+    });
+    
+    final numWaypoints = Math.max(12, Math.min(25, (distance * 3).round()));
+    
+    for (int i = 1; i <= numWaypoints; i++) {
+      final progress = i / (numWaypoints + 1);
+      
+      var lat = start.latitude + (end.latitude - start.latitude) * progress;
+      var lng = start.longitude + (end.longitude - start.longitude) * progress;
+      
+      // Add realistic road curves and major road following
+      if (i > 1 && i < numWaypoints) {
+        // Simulate following major roads
+        final roadCurveFactor = Math.sin(progress * Math.pi * 2) * 0.0015;
+        final majorRoadOffset = Math.cos(progress * Math.pi * 3) * 0.001;
+        
+        lat += roadCurveFactor * (i % 2 == 0 ? 1 : -1);
+        lng += (roadCurveFactor * 0.7 + majorRoadOffset) * (i % 3 == 0 ? 1 : -1);
+        
+        // Simulate avoiding obstacles and following street patterns
+        if (distance > 10.0) {
+          final streetPatternOffset = Math.sin(progress * Math.pi * 4) * 0.0008;
+          lat += streetPatternOffset;
+        }
+      }
+      
+      points.add({
+        'latitude': lat,
+        'longitude': lng,
+      });
+    }
+    
+    points.add({
+      'latitude': end.latitude,
+      'longitude': end.longitude,
+    });
+    
+    return points;
+  }
+  
+  // Create simulated route (basic version)
+  Future<Map<String, dynamic>> _createSimulatedRoute(
+    GeoPoint start,
+    GeoPoint end,
+    Map<String, dynamic> destination,
+    int index,
+  ) async {
+    final distance = _calculateDistance(start.latitude, start.longitude, end.latitude, end.longitude);
+    
+    // Create basic road route
+    final roadPolyline = _generateBasicRoadPolyline(start, end, distance);
+    
+    // Calculate realistic metrics
+    final roadDistance = distance * _getRoadFactor(distance);
+    final drivingTime = _calculateDrivingTime(roadDistance);
+    
+    return {
+      'route_id': 'simulated_$index',
+      'destination_name': destination['street_name'] ?? 'Water Supply ${index + 1}',
+      'destination_address': destination['address'] ?? 'Simulated Route',
+      'distance': roadDistance,
+      'travel_time': drivingTime,
+      'polyline_points': roadPolyline,
+      'color': index == 0 ? '#FF3366' : '#0099FF',
+      'weight': index == 0 ? 5 : 3,
+      'opacity': 0.75,
+      'is_shortest': index == 0,
+      'priority_rank': index + 1,
+      'destination_details': {
+        'id': 'sim_dest_$index',
+        'latitude': end.latitude,
+        'longitude': end.longitude,
+        'name': destination['street_name'] ?? 'Water Supply ${index + 1}',
+        'address': destination['address'] ?? 'Unknown Address',
+        'accessible_by_car': true,
+      },
+      'route_type': 'basic_simulation',
+      'route_source': 'basic_simulation',
+    };
+  }
+  
+  // Generate basic road-following polyline
+  List<Map<String, dynamic>> _generateBasicRoadPolyline(GeoPoint start, GeoPoint end, double distance) {
+    final points = <Map<String, dynamic>>[];
+    
+    points.add({
+      'latitude': start.latitude,
+      'longitude': start.longitude,
+    });
+    
+    final numWaypoints = Math.max(8, Math.min(15, (distance * 2).round()));
+    
+    for (int i = 1; i <= numWaypoints; i++) {
+      final progress = i / (numWaypoints + 1);
+      
+      var lat = start.latitude + (end.latitude - start.latitude) * progress;
+      var lng = start.longitude + (end.longitude - start.longitude) * progress;
+      
+      // Add basic road curves
+      if (i > 1 && i < numWaypoints) {
+        final curveFactor = Math.sin(progress * Math.pi) * 0.001;
+        lat += curveFactor * (i % 2 == 0 ? 1 : -1);
+        lng += curveFactor * 0.5 * (i % 3 == 0 ? 1 : -1);
+      }
+      
+      points.add({
+        'latitude': lat,
+        'longitude': lng,
+      });
+    }
+    
+    points.add({
+      'latitude': end.latitude,
+      'longitude': end.longitude,
+    });
+    
+    return points;
+  }
+  
   // Decode Google polyline format
   List<Map<String, dynamic>> _decodeGooglePolyline(String encoded) {
     List<Map<String, dynamic>> points = [];
@@ -472,132 +741,6 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
         'longitude': lng / 1E5,
       });
     }
-    
-    return points;
-  }
-  
-  // SIMPLIFIED: Simulation routes as fallback
-  Future<List<Map<String, dynamic>>> _getSimulationRoutes() async {
-    try {
-      print('🧮 Getting simulation routes...');
-      
-      final csvData = await _apiService.getAllWaterSupplyPointsFromCSV();
-      final points = csvData['points'] as List<dynamic>;
-      
-      if (points.isEmpty) {
-        throw Exception('No water supply points in CSV data');
-      }
-      
-      final routes = <Map<String, dynamic>>[];
-      final maxRoutes = Math.min(12, points.length);
-      
-      for (int i = 0; i < maxRoutes; i++) {
-        final point = points[i];
-        final lat = (point['latitude'] as num?)?.toDouble();
-        final lng = (point['longitude'] as num?)?.toDouble();
-        
-        if (lat != null && lng != null) {
-          final destinationLocation = GeoPoint(latitude: lat, longitude: lng);
-          
-          final route = await _createSimulatedRoute(
-            _currentLocation!, 
-            destinationLocation,
-            point,
-            i,
-          );
-          
-          routes.add(route);
-        }
-      }
-      
-      // Sort by distance
-      routes.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
-      
-      print('✅ Generated ${routes.length} simulation routes');
-      
-      return routes;
-      
-    } catch (e) {
-      print('❌ Simulation error: $e');
-      throw Exception('Route simulation failed: $e');
-    }
-  }
-  
-  // Create simulated route
-  Future<Map<String, dynamic>> _createSimulatedRoute(
-    GeoPoint start,
-    GeoPoint end,
-    Map<String, dynamic> destination,
-    int index,
-  ) async {
-    final distance = _calculateDistance(start.latitude, start.longitude, end.latitude, end.longitude);
-    
-    // Create realistic road route
-    final roadPolyline = _generateRoadPolyline(start, end, distance);
-    
-    // Calculate realistic metrics
-    final roadDistance = distance * _getRoadFactor(distance);
-    final drivingTime = _calculateDrivingTime(roadDistance);
-    
-    return {
-      'route_id': 'simulated_$index',
-      'destination_name': destination['street_name'] ?? 'Water Supply ${index + 1}',
-      'destination_address': destination['address'] ?? 'Simulated Route',
-      'distance': roadDistance,
-      'travel_time': drivingTime,
-      'polyline_points': roadPolyline,
-      'color': index == 0 ? '#FF6600' : '#0099FF',
-      'weight': index == 0 ? 5 : 3,
-      'opacity': 0.8,
-      'is_shortest': index == 0,
-      'priority_rank': index + 1,
-      'destination_details': {
-        'id': 'sim_dest_$index',
-        'latitude': end.latitude,
-        'longitude': end.longitude,
-        'name': destination['street_name'] ?? 'Water Supply ${index + 1}',
-        'address': destination['address'] ?? 'Unknown Address',
-        'accessible_by_car': true,
-      },
-      'route_type': 'simulation',
-      'route_source': 'simulation',
-    };
-  }
-  
-  // Generate road-following polyline
-  List<Map<String, dynamic>> _generateRoadPolyline(GeoPoint start, GeoPoint end, double distance) {
-    final points = <Map<String, dynamic>>[];
-    
-    points.add({
-      'latitude': start.latitude,
-      'longitude': start.longitude,
-    });
-    
-    final numWaypoints = Math.max(8, Math.min(20, (distance * 2).round()));
-    
-    for (int i = 1; i <= numWaypoints; i++) {
-      final progress = i / (numWaypoints + 1);
-      
-      var lat = start.latitude + (end.latitude - start.latitude) * progress;
-      var lng = start.longitude + (end.longitude - start.longitude) * progress;
-      
-      // Add road curves
-      if (i > 1 && i < numWaypoints) {
-        final curveFactor = Math.sin(progress * Math.pi) * 0.001;
-        lat += curveFactor * (i % 2 == 0 ? 1 : -1);
-        lng += curveFactor * 0.5 * (i % 3 == 0 ? 1 : -1);
-      }
-      
-      points.add({
-        'latitude': lat,
-        'longitude': lng,
-      });
-    }
-    
-    points.add({
-      'latitude': end.latitude,
-      'longitude': end.longitude,
-    });
     
     return points;
   }
@@ -672,6 +815,36 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     else if (roadDistance > 25) avgSpeed = 70.0;
     
     final timeHours = roadDistance / avgSpeed;
+    final timeMinutes = (timeHours * 60).round();
+    
+    if (timeMinutes >= 60) {
+      final hours = timeMinutes ~/ 60;
+      final minutes = timeMinutes % 60;
+      return minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
+    }
+    
+    return '${timeMinutes}m';
+  }
+  
+  String _calculateEnhancedDrivingTime(double roadDistance) {
+    // More realistic time calculation considering traffic patterns
+    final currentHour = DateTime.now().hour;
+    double baseSpeed = 50.0; // km/h
+    
+    // Adjust for time of day
+    if (currentHour >= 7 && currentHour <= 9) {
+      baseSpeed = 35.0; // Morning rush
+    } else if (currentHour >= 17 && currentHour <= 19) {
+      baseSpeed = 30.0; // Evening rush
+    } else if (currentHour >= 22 || currentHour <= 6) {
+      baseSpeed = 65.0; // Night time
+    }
+    
+    // Adjust for distance
+    if (roadDistance < 5) baseSpeed *= 0.8; // Urban areas
+    else if (roadDistance > 20) baseSpeed *= 1.2; // Highway speeds
+    
+    final timeHours = roadDistance / baseSpeed;
     final timeMinutes = (timeHours * 60).round();
     
     if (timeMinutes >= 60) {
@@ -763,7 +936,16 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                 children: [
                   Icon(Icons.smart_toy, color: Colors.white, size: 16),
                   SizedBox(width: 8),
-                  Text('AI + Google Maps', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  Text('AI Backend Online', style: TextStyle(color: Colors.white, fontSize: 12)),
+                ],
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.offline_bolt, color: Colors.orange, size: 16),
+                  SizedBox(width: 8),
+                  Text('Offline Mode', style: TextStyle(color: Colors.orange, fontSize: 12)),
                 ],
               ),
           ],
@@ -775,7 +957,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
   Widget _buildMapContent() {
     return Stack(
       children: [
-        // GOOGLE MAPS dengan simple address info windows
+        // Google Maps widget
         if (_currentLocation != null && _allRoutes.isNotEmpty)
           Positioned.fill(
             child: GoogleMapsRouteWidget(
@@ -844,7 +1026,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
             ),
             SizedBox(width: 8),
             Text(
-              '${_allRoutes.length} routes found',
+              '${_allRoutes.length} routes',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 11,
@@ -957,7 +1139,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
             _isLoadingRoutes ? Icons.hourglass_empty : Icons.refresh,
             Colors.green,
             _isLoadingRoutes ? null : () {
-              _initializeGoogleDrivingRoutes();
+              _initializeMapRoutes();
             },
           ),
           
@@ -1086,8 +1268,8 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                 ),
                 child: Text(
                   _backendConnected 
-                    ? 'Unable to load routes from backend'
-                    : 'Backend offline - no routes available',
+                    ? 'Unable to load routes from any source'
+                    : 'Backend offline and no fallback data available',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.8),
                     fontSize: 14,
@@ -1098,7 +1280,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
               SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () {
-                  _initializeGoogleDrivingRoutes();
+                  _initializeMapRoutes();
                 },
                 icon: Icon(Icons.refresh),
                 label: Text('Try Again'),

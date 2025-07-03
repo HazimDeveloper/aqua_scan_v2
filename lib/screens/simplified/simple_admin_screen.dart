@@ -1,4 +1,4 @@
-// lib/screens/simplified/simple_admin_screen.dart - REDESIGNED: Report Details & Analysis Focus
+// lib/screens/simplified/simple_admin_screen.dart - ENHANCED: With Image Re-Analysis Feature
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -38,6 +38,17 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
   // UI State
   int _currentTabIndex = 0;
   bool _showResolvedReports = false;
+  
+  // NEW: Re-Analysis State
+  bool _isReAnalyzing = false;
+  WaterQualityState? _reAnalyzedQuality;
+  double? _reAnalyzedConfidence;
+  String? _reAnalyzedClass;
+  bool _reAnalysisCompleted = false;
+  bool _waterDetectedInReAnalysis = false;
+  String? _reAnalysisError;
+  bool _isLowConfidenceReAnalysis = false;
+  int? _analyzingImageIndex; // Track which image is being analyzed
   
   @override
   void initState() {
@@ -127,6 +138,100 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     }
   }
   
+  // NEW: Re-analyze water quality from image
+  Future<void> _reAnalyzeWaterQuality(String imagePath, int imageIndex) async {
+    if (!_backendConnected) {
+      _showMessage('Backend server is not available for re-analysis', isError: true);
+      return;
+    }
+    
+    try {
+      _resetReAnalysisState();
+      setState(() {
+        _isReAnalyzing = true;
+        _analyzingImageIndex = imageIndex;
+      });
+      
+      print('🔬 Starting image re-analysis...');
+      print('📸 Image path: $imagePath');
+      
+      // Validate image file
+      final imageFile = File(imagePath);
+      if (!await imageFile.exists()) {
+        throw Exception('Image file does not exist: $imagePath');
+      }
+      
+      final fileSize = await imageFile.length();
+      if (fileSize == 0) {
+        throw Exception('Image file is empty');
+      }
+      
+      print('📏 Image size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
+      
+      // Analyze water quality
+      final result = await _apiService.analyzeWaterQualityWithConfidence(imageFile);
+      
+      print('📊 Re-Analysis result:');
+      print('   Water detected: ${result.waterDetected}');
+      print('   Quality: ${result.waterQuality}');
+      print('   Confidence: ${result.confidence}%');
+      print('   Original class: ${result.originalClass}');
+      print('   Low confidence: ${result.isLowConfidence}');
+      
+      setState(() {
+        _waterDetectedInReAnalysis = result.waterDetected;
+        _reAnalyzedQuality = result.waterQuality;
+        _reAnalyzedConfidence = result.confidence;
+        _reAnalyzedClass = result.originalClass;
+        _reAnalysisCompleted = true;
+        _isReAnalyzing = false;
+        _isLowConfidenceReAnalysis = result.isLowConfidence;
+        _reAnalysisError = result.errorMessage;
+        _analyzingImageIndex = null;
+      });
+      
+      // Show success message
+      if (result.waterDetected && result.confidence != null && result.confidence! > 0) {
+        _showMessage(
+          'Re-analysis completed! ${WaterQualityUtils.getWaterQualityText(result.waterQuality)} (${result.confidence!.toStringAsFixed(1)}% confidence)',
+          isError: false,
+          duration: 5,
+        );
+      } else {
+        _showMessage(
+          'Re-analysis completed with ${result.waterDetected ? 'low confidence' : 'no water detected'}',
+          isError: false,
+          duration: 5,
+        );
+      }
+      
+    } catch (e) {
+      print('❌ Re-analysis failed: $e');
+      
+      setState(() {
+        _isReAnalyzing = false;
+        _reAnalysisCompleted = true;
+        _reAnalysisError = e.toString();
+        _analyzingImageIndex = null;
+      });
+      
+      _showMessage('Re-analysis failed: ${e.toString()}', isError: true);
+    }
+  }
+  
+  void _resetReAnalysisState() {
+    setState(() {
+      _reAnalyzedQuality = null;
+      _reAnalyzedConfidence = null;
+      _reAnalyzedClass = null;
+      _reAnalysisCompleted = false;
+      _waterDetectedInReAnalysis = false;
+      _reAnalysisError = null;
+      _isLowConfidenceReAnalysis = false;
+      _analyzingImageIndex = null;
+    });
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,7 +261,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Admin Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                Text('Report Management & Analysis', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9))),
+                Text('Report Management & AI Analysis', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9))),
               ],
             ),
           ),
@@ -334,10 +439,10 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
           SizedBox(width: 12),
           Expanded(
             child: _buildStatCard(
-              'Backend',
-              _backendConnected ? 'Connected' : 'Offline',
-              _backendConnected ? Icons.cloud_done : Icons.cloud_off,
-              _backendConnected ? Colors.green : Colors.red,
+              'AI Analysis',
+              _backendConnected ? 'Available' : 'Offline',
+              _backendConnected ? Icons.psychology : Icons.psychology_outlined,
+              _backendConnected ? Colors.purple : Colors.grey,
             ),
           ),
         ],
@@ -392,6 +497,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
           onTap: () {
             setState(() {
               _selectedReport = report;
+              _resetReAnalysisState(); // Reset re-analysis when selecting new report
             });
           },
           borderRadius: BorderRadius.circular(16),
@@ -528,7 +634,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                       ),
                     ),
                     
-                    // Images Count
+                    // Images Count & Re-Analysis Indicator
                     if (report.imageUrls.isNotEmpty) ...[
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -542,6 +648,10 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                             Icon(Icons.image, size: 12, color: Colors.blue),
                             SizedBox(width: 4),
                             Text('${report.imageUrls.length}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
+                            if (_backendConnected) ...[
+                              SizedBox(width: 4),
+                              Icon(Icons.psychology, size: 12, color: Colors.purple),
+                            ],
                           ],
                         ),
                       ),
@@ -559,9 +669,9 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.visibility, size: 12, color: Colors.orange),
+                          Icon(Icons.analytics, size: 12, color: Colors.orange),
                           SizedBox(width: 4),
-                          Text('View Details', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
+                          Text('Analyze', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
                         ],
                       ),
                     ),
@@ -593,14 +703,14 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
           
           SizedBox(height: 16),
           
-          // Images Section
+          // Images Section with Re-Analysis
           if (_selectedReport!.imageUrls.isNotEmpty)
-            _buildImagesSection(),
+            _buildEnhancedImagesSection(),
           
           SizedBox(height: 16),
           
-          // Analysis Results Section
-          _buildAnalysisSection(),
+          // Original Analysis Results vs Re-Analysis Results
+          _buildComparisonAnalysisSection(),
           
           SizedBox(height: 16),
           
@@ -629,6 +739,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
               onPressed: () {
                 setState(() {
                   _selectedReport = null;
+                  _resetReAnalysisState();
                 });
               },
               icon: Icon(Icons.arrow_back, color: Colors.orange),
@@ -642,8 +753,8 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Report Analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
-                  Text('Detailed water quality assessment', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  Text('Advanced Analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                  Text('AI-powered water quality assessment', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ],
               ),
             ),
@@ -730,7 +841,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          WaterQualityUtils.getWaterQualityText(_selectedReport!.waterQuality),
+                          'Original: ${WaterQualityUtils.getWaterQualityText(_selectedReport!.waterQuality)}',
                           style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -754,7 +865,8 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     );
   }
   
-  Widget _buildImagesSection() {
+  // NEW: Enhanced Images Section with Re-Analysis
+  Widget _buildEnhancedImagesSection() {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -777,34 +889,66 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                     color: Colors.blue,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.image, color: Colors.white, size: 20),
+                  child: Icon(Icons.psychology, color: Colors.white, size: 20),
                 ),
                 SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Uploaded Images', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
-                      Text('${_selectedReport!.imageUrls.length} image${_selectedReport!.imageUrls.length == 1 ? '' : 's'} available for analysis', style: TextStyle(fontSize: 12, color: Colors.blue.shade600)),
+                      Text('AI Image Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+                      Text('${_selectedReport!.imageUrls.length} image${_selectedReport!.imageUrls.length == 1 ? '' : 's'} • Click to re-analyze with AI', style: TextStyle(fontSize: 12, color: Colors.blue.shade600)),
                     ],
                   ),
                 ),
+                if (_backendConnected)
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_done, color: Colors.white, size: 12),
+                        SizedBox(width: 4),
+                        Text('AI Ready', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_off, color: Colors.white, size: 12),
+                        SizedBox(width: 4),
+                        Text('Offline', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
               ],
             ),
             
             SizedBox(height: 16),
             
             Container(
-              height: 120,
+              height: 140,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: _selectedReport!.imageUrls.length,
                 itemBuilder: (context, index) {
                   final imagePath = _selectedReport!.imageUrls[index];
                   return Container(
-                    width: 120,
+                    width: 140,
                     margin: EdgeInsets.only(right: 12),
-                    child: _buildImageCard(imagePath, index),
+                    child: _buildEnhancedImageCard(imagePath, index),
                   );
                 },
               ),
@@ -815,45 +959,122 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     );
   }
   
-  Widget _buildImageCard(String imagePath, int index) {
+  Widget _buildEnhancedImageCard(String imagePath, int index) {
+    final isAnalyzing = _isReAnalyzing && _analyzingImageIndex == index;
+    
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.white, Colors.grey.shade50],
+      child: InkWell(
+        onTap: _backendConnected && !_isReAnalyzing 
+            ? () => _reAnalyzeWaterQuality(imagePath, index)
+            : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.white, Colors.grey.shade50],
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
-            // Image Display
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                child: _buildImageWidget(imagePath),
-              ),
-            ),
-            
-            // Image Number Badge
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              // Image Display
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: _buildImageWidget(imagePath),
                 ),
-                child: Text('${index + 1}', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
               ),
-            ),
-          ],
+              
+              // Analysis Overlay
+              if (isAnalyzing)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 3,
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Analyzing...',
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              
+              // Image Number Badge
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text('${index + 1}', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              
+              // AI Analysis Button
+              if (_backendConnected && !isAnalyzing)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [Colors.purple, Colors.purple.shade700]),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.purple.withOpacity(0.3),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.psychology, color: Colors.white, size: 12),
+                        SizedBox(width: 4),
+                        Text('AI', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+              
+              // Offline Indicator
+              if (!_backendConnected)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('Offline', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -916,7 +1137,8 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     );
   }
   
-  Widget _buildAnalysisSection() {
+  // NEW: Comparison Analysis Section
+  Widget _buildComparisonAnalysisSection() {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -939,15 +1161,15 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
                     color: Colors.purple,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.psychology, color: Colors.white, size: 20),
+                  child: Icon(Icons.compare_arrows, color: Colors.white, size: 20),
                 ),
                 SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('AI Analysis Results', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
-                      Text('Water quality classification and confidence score', style: TextStyle(fontSize: 12, color: Colors.purple.shade600)),
+                      Text('Analysis Comparison', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
+                      Text(_reAnalysisCompleted ? 'Original vs Re-Analysis Results' : 'Click images above to run AI re-analysis', style: TextStyle(fontSize: 12, color: Colors.purple.shade600)),
                     ],
                   ),
                 ),
@@ -956,129 +1178,252 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
             
             SizedBox(height: 16),
             
-            _buildAnalysisResultCard(),
+            Row(
+              children: [
+                // Original Analysis
+                Expanded(child: _buildOriginalAnalysisCard()),
+                
+                SizedBox(width: 16),
+                
+                // Re-Analysis Results
+                Expanded(child: _buildReAnalysisCard()),
+              ],
+            ),
+            
+            // Comparison Summary
+            if (_reAnalysisCompleted)
+              _buildComparisonSummary(),
           ],
         ),
       ),
     );
   }
   
-  Widget _buildAnalysisResultCard() {
-    // Mock analysis data (in real app, this would come from the report)
-    final confidence = _getMockConfidenceScore(_selectedReport!.waterQuality);
-    final classification = WaterQualityUtils.getWaterQualityText(_selectedReport!.waterQuality);
-    final recommendation = _getRecommendation(_selectedReport!.waterQuality);
-    
-    return Column(
-      children: [
-        // Classification Result
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.purple.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildOriginalAnalysisCard() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text('Classification Result', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+              Icon(Icons.history, color: Colors.blue, size: 16),
+              SizedBox(width: 8),
+              Text('Original Report', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue)),
+            ],
+          ),
+          SizedBox(height: 12),
+          
+          // Quality
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: WaterQualityUtils.getWaterQualityColor(_selectedReport!.waterQuality),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              WaterQualityUtils.getWaterQualityText(_selectedReport!.waterQuality),
+              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
+          
+          SizedBox(height: 8),
+          Text(
+            WaterQualityUtils.getWaterQualityDescription(_selectedReport!.waterQuality),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildReAnalysisCard() {
+    if (!_reAnalysisCompleted) {
+      return Container(
+        padding: EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.psychology_outlined, color: Colors.grey, size: 16),
+                SizedBox(width: 8),
+                Text('AI Re-Analysis', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+              ],
+            ),
+            SizedBox(height: 12),
+            
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                children: [
+                  Icon(Icons.touch_app, color: Colors.grey.shade400, size: 32),
+                  SizedBox(height: 8),
+                  Text(
+                    _backendConnected ? 'Click image to analyze' : 'Backend offline',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.purple.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.psychology, color: Colors.purple, size: 16),
+              SizedBox(width: 8),
+              Text('AI Re-Analysis', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.purple)),
+            ],
+          ),
+          SizedBox(height: 12),
+          
+          if (_reAnalysisError != null) ...[
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text('Analysis Error', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+            SizedBox(height: 8),
+            Text(_reAnalysisError!, style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
+          ] else if (!_waterDetectedInReAnalysis) ...[
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text('No Water Detected', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+            SizedBox(height: 8),
+            Text('AI did not detect water in the image', style: TextStyle(fontSize: 11, color: Colors.orange.shade600)),
+          ] else if (_reAnalyzedQuality != null) ...[
+            // Quality
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: WaterQualityUtils.getWaterQualityColor(_reAnalyzedQuality!),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                WaterQualityUtils.getWaterQualityText(_reAnalyzedQuality!),
+                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+            
+            if (_reAnalyzedConfidence != null) ...[
               SizedBox(height: 8),
               Row(
                 children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: WaterQualityUtils.getWaterQualityColor(_selectedReport!.waterQuality),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(classification, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      WaterQualityUtils.getWaterQualityDescription(_selectedReport!.waterQuality),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
-                    ),
-                  ),
+                  Icon(Icons.speed, size: 12, color: Colors.purple),
+                  SizedBox(width: 4),
+                  Text('${_reAnalyzedConfidence!.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple)),
+                  SizedBox(width: 4),
+                  Text('confidence', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                 ],
               ),
             ],
-          ),
-        ),
-        
-        SizedBox(height: 12),
-        
-        // Confidence Score
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.purple.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Confidence Score', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-              SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: LinearProgressIndicator(
-                      value: confidence / 100,
-                      backgroundColor: Colors.grey.shade300,
-                      valueColor: AlwaysStoppedAnimation<Color>(_getConfidenceColor(confidence)),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _getConfidenceColor(confidence),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text('${confidence.toStringAsFixed(1)}%', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
+            
+            if (_reAnalyzedClass != null && _reAnalyzedClass!.isNotEmpty) ...[
               SizedBox(height: 8),
               Text(
-                WaterQualityUtils.getConfidenceLevelDescription(confidence),
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                'Class: $_reAnalyzedClass',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
               ),
             ],
+          ],
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildComparisonSummary() {
+    if (!_reAnalysisCompleted) return SizedBox.shrink();
+    
+    bool resultsMatch = false;
+    String comparisonText = '';
+    Color comparisonColor = Colors.grey;
+    IconData comparisonIcon = Icons.help;
+    
+    if (_reAnalysisError != null) {
+      comparisonText = 'Re-analysis failed - cannot compare results';
+      comparisonColor = Colors.red;
+      comparisonIcon = Icons.error;
+    } else if (!_waterDetectedInReAnalysis) {
+      comparisonText = 'No water detected in re-analysis - results differ';
+      comparisonColor = Colors.orange;
+      comparisonIcon = Icons.warning;
+    } else if (_reAnalyzedQuality != null) {
+      resultsMatch = _reAnalyzedQuality == _selectedReport!.waterQuality;
+      
+      if (resultsMatch) {
+        comparisonText = 'Results match! Consistent water quality classification';
+        comparisonColor = Colors.green;
+        comparisonIcon = Icons.check_circle;
+      } else {
+        comparisonText = 'Results differ - original vs re-analysis show different classifications';
+        comparisonColor = Colors.amber;
+        comparisonIcon = Icons.compare_arrows;
+      }
+    }
+    
+    return Container(
+      margin: EdgeInsets.only(top: 16),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: comparisonColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: comparisonColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(comparisonIcon, color: comparisonColor, size: 20),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  resultsMatch ? 'Analysis Consistency' : 'Analysis Variance',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: comparisonColor),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  comparisonText,
+                  style: TextStyle(fontSize: 12, color: comparisonColor.withOpacity(0.8)),
+                ),
+              ],
+            ),
           ),
-        ),
-        
-        SizedBox(height: 12),
-        
-        // Recommendation
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.purple.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Recommendation', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-              SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.lightbulb, color: Colors.amber, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(recommendation, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
   
@@ -1381,6 +1726,7 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
         _userReports.removeWhere((r) => r.id == report.id);
         if (_selectedReport?.id == report.id) {
           _selectedReport = null;
+          _resetReAnalysisState();
         }
       });
       
@@ -1419,37 +1765,24 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     }
   }
   
-  // Helper Methods
-  double _getMockConfidenceScore(WaterQualityState quality) {
-    switch (quality) {
-      case WaterQualityState.optimum: return 92.5;
-      case WaterQualityState.highPh: return 87.3;
-      case WaterQualityState.lowPh: return 84.7;
-      case WaterQualityState.highPhTemp: return 91.2;
-      case WaterQualityState.lowTemp: return 89.8;
-      case WaterQualityState.lowTempHighPh: return 86.4;
-      case WaterQualityState.unknown:
-      default: return 78.9;
-    }
-  }
-  
-  Color _getConfidenceColor(double confidence) {
-    if (confidence >= 90) return Colors.green;
-    if (confidence >= 80) return Colors.lightGreen;
-    if (confidence >= 70) return Colors.orange;
-    return Colors.red;
-  }
-  
-  String _getRecommendation(WaterQualityState quality) {
-    switch (quality) {
-      case WaterQualityState.optimum: return 'Water quality is within acceptable parameters';
-      case WaterQualityState.highPh: return 'Consider pH reduction treatment';
-      case WaterQualityState.lowPh: return 'pH neutralization recommended';
-      case WaterQualityState.highPhTemp: return 'Immediate intervention required';
-      case WaterQualityState.lowTemp: return 'Monitor temperature fluctuations';
-      case WaterQualityState.lowTempHighPh: return 'Multiple parameter adjustment needed';
-      case WaterQualityState.unknown:
-      default: return 'Further testing required';
+  void _showMessage(String message, {required bool isError, int duration = 4}) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(isError ? Icons.error : Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(message, style: TextStyle(fontSize: 14))),
+            ],
+          ),
+          backgroundColor: isError ? Colors.red : Colors.green,
+          duration: Duration(seconds: duration),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
     }
   }
 }
