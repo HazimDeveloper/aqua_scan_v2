@@ -747,9 +747,10 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
             polylines: _polylines,
             myLocationEnabled: false,
             myLocationButtonEnabled: false,
-            zoomControlsEnabled: false, // Disable default zoom controls
+            zoomControlsEnabled: true, // Disable default zoom controls
             mapToolbarEnabled: true,
             compassEnabled: true,
+            zoomGesturesEnabled: true,
             mapType: MapType.normal,
             trafficEnabled: true,
             onCameraMove: (CameraPosition position) {

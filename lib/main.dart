@@ -7,6 +7,7 @@ import 'services/database_service.dart';
 import 'services/storage_service.dart';
 import 'services/location_service.dart';
 import 'services/api_service.dart';
+import 'dart:io';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +18,10 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  final apiBaseUrl = 'http://10.62.59.1:8000'; // Replace with your API URL
+  // Using UiTM network IP address
+  final apiBaseUrl = Platform.isAndroid 
+      ? 'http://10.62.48.206:8000'  // Your Wi-Fi IPv4 address
+      : 'http://localhost:8000';
 
   MyApp({Key? key}) : super(key: key);
 
@@ -39,7 +43,7 @@ class MyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'AquaScan - Local Storage',
+        title: 'nadiAir',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: Colors.blue,

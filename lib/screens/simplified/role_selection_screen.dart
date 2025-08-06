@@ -54,53 +54,41 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppTheme.primaryColor.withOpacity(0.1),
-                Colors.white,
-                AppTheme.primaryColor.withOpacity(0.05),
-              ],
-            ),
+      body: Container(
+        height: MediaQuery.of(context).size.height,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.primaryColor.withOpacity(0.1),
+              Colors.white,
+              AppTheme.primaryColor.withOpacity(0.05),
+            ],
           ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // App Logo Section
-                      _buildAppLogo(),
-                      
-                      const SizedBox(height: 32),
-                      
-                      // App Title
-                      _buildAppTitle(),
-                      
-                      const SizedBox(height: 48),
-                      
-                      // Role Selection Title
-                      _buildSectionTitle(),
-                      
-                      const SizedBox(height: 32),
-                      
-                      // Role Cards
-                      _buildRoleCards(),
-                      
-                      const SizedBox(height: 32),
-                      
-                      // Footer Info
-                      _buildFooterInfo(),
-                    ],
-                  ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(0.0),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // App Logo Section
+                    _buildAppLogo(),
+                    const SizedBox(height: 8),
+                    // Role Selection Title
+                    _buildSectionTitle(),
+                    const SizedBox(height: 32),
+                    // Role Cards
+                    _buildRoleCards(),
+                    const SizedBox(height: 32),
+                    // Footer Info
+                    _buildFooterInfo(),
+                  ],
                 ),
               ),
             ),
@@ -115,14 +103,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       width: 120,
       height: 120,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.primaryColor,
-            AppTheme.primaryColor.withOpacity(0.7),
-          ],
-        ),
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -132,10 +112,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           ),
         ],
       ),
-      child: const Icon(
-        Icons.water_drop,
-        size: 60,
-        color: Colors.white,
+      child: ClipOval(
+        child: Image.asset(
+          'assets/images/nadi_air_logo.png',
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }
@@ -151,7 +132,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
             ],
           ).createShader(bounds),
           child: const Text(
-            'AquaScan',
+            'nadiAir',
             style: TextStyle(
               fontSize: 36,
               fontWeight: FontWeight.bold,

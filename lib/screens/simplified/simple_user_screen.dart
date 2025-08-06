@@ -165,6 +165,11 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                 
                 // Features Section
                 _buildFeaturesSection(),
+
+                const SizedBox(height: 24),
+
+                // Water Classification Info Section
+                _buildWaterClassificationInfoSection(),
               ],
             ),
           ),
@@ -222,7 +227,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Welcome to AquaScan!',
+                    'Welcome to nadiAir!',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -621,6 +626,96 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildWaterClassificationInfoSection() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.science, color: Colors.blue, size: 28),
+                SizedBox(width: 10),
+                Text(
+                  'Water Classification',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildWaterInfoTile(
+              icon: Icons.opacity,
+              title: 'pH Level',
+              description:
+                  'pH measures how acidic or alkaline water is. Safe drinking water usually has a pH between 6.5 and 8.5.',
+            ),
+            _buildWaterInfoTile(
+              icon: Icons.trending_up,
+              title: 'High pH (>8.5)',
+              description:
+                  'Water is alkaline. May taste bitter, cause deposits, and reduce effectiveness of chlorine disinfection.',
+            ),
+            _buildWaterInfoTile(
+              icon: Icons.trending_down,
+              title: 'Low pH (<6.5)',
+              description:
+                  'Water is acidic. Can corrode pipes, leach metals, and taste sour or metallic.',
+            ),
+            _buildWaterInfoTile(
+              icon: Icons.warning,
+              title: 'Why pH Changes?',
+              description:
+                  'pH can change due to pollution, soil/rock types, or industrial waste. Regular monitoring is important.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaterInfoTile({required IconData icon, required String title, required String description}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.blueAccent, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

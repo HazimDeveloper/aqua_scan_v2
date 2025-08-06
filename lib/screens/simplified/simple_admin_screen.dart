@@ -1665,20 +1665,6 @@ class _SimpleAdminScreenState extends State<SimpleAdminScreen>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Map View FAB
-        FloatingActionButton(
-          heroTag: "map_view",
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => SimpleMapScreen()),
-            );
-          },
-          backgroundColor: Colors.green,
-          foregroundColor: Colors.white,
-          child: Icon(Icons.map),
-          tooltip: 'View Routes Map',
-        ),
         
         SizedBox(height: 12),
         

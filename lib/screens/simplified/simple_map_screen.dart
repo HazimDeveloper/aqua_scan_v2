@@ -177,7 +177,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       
       // PRIORITY 1: Backend + Google Maps (if backend available and API key configured)
       if (_backendConnected) {
-        setState(() => _routeLoadingStatus = 'Using AI + Google Maps...');
+        setState(() => _routeLoadingStatus = 'Using AI');
         try {
           final result = await _apiService.getActualDrivingRoutes(
             _currentLocation!,
@@ -189,8 +189,8 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
               (result['routes'] as List?)?.isNotEmpty == true) {
             
             routeData = await _processGoogleRoutesSimple(result['routes']);
-            method = 'AI + Google Maps API';
-            print('✅ SUCCESS: AI + Google routes');
+            method = 'AI + Google Directions API';
+            print('✅ SUCCESS: AI + routes');
           }
         } catch (e) {
           print('⚠️ Backend + Google failed: $e');
@@ -199,7 +199,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       
       // PRIORITY 2: Direct Google Maps Directions API (only if we have a real API key)
       if (routeData.isEmpty && _googleMapsApiKey != null && _googleMapsApiKey!.isNotEmpty) {
-        setState(() => _routeLoadingStatus = 'Using Google Directions API...');
+        setState(() => _routeLoadingStatus = 'Using  Genetic Algorithm ');
         try {
           routeData = await _getDirectGoogleDirections();
           method = 'Google Directions API';
@@ -1121,41 +1121,41 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
           SizedBox(height: 12),
           
           // Add report
-          _buildActionButton(
-            Icons.add_circle,
-            Colors.blue,
-            () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => SimpleReportScreen(isAdmin: true)),
-              );
-            },
-          ),
-          
-          SizedBox(height: 12),
-          
-          // Refresh
-          _buildActionButton(
-            _isLoadingRoutes ? Icons.hourglass_empty : Icons.refresh,
-            Colors.green,
-            _isLoadingRoutes ? null : () {
-              _initializeMapRoutes();
-            },
-          ),
-          
-          SizedBox(height: 20),
+          // _buildActionButton(
+          //   Icons.add_circle,
+          //   Colors.blue,
+          //   () {
+          //     Navigator.push(
+          //       context,
+          //       MaterialPageRoute(builder: (context) => SimpleReportScreen(isAdmin: true)),
+          //     );
+          //   },
+          // ),
+          //
+          // SizedBox(height: 12),
+          //
+          // // Refresh
+          // _buildActionButton(
+          //   _isLoadingRoutes ? Icons.hourglass_empty : Icons.refresh,
+          //   Colors.green,
+          //   _isLoadingRoutes ? null : () {
+          //     _initializeMapRoutes();
+          //   },
+          // ),
+          //
+          // SizedBox(height: 20),
           
           // Exit
-          _buildActionButton(
-            Icons.close,
-            Colors.red,
-            () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => RoleSelectionScreen()),
-              );
-            },
-          ),
+          // _buildActionButton(
+          //   Icons.close,
+          //   Colors.red,
+          //   () {
+          //     Navigator.pushReplacement(
+          //       context,
+          //       MaterialPageRoute(builder: (context) => RoleSelectionScreen()),
+          //     );
+          //   },
+          // ),
         ],
       ),
     );
