@@ -371,7 +371,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildFeatureChip('AI Analysis', Icons.psychology),
+            _buildFeatureChip('Double AI Verification', Icons.verified),
             const SizedBox(width: 8),
             _buildFeatureChip('Route Maps', Icons.map),
             const SizedBox(width: 8),

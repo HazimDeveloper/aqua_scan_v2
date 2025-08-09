@@ -5,6 +5,7 @@ import 'dart:math' as Math;
 import 'package:http/http.dart' as http;
 import '../utils/water_quality_utils.dart';
 import '../models/report_model.dart';
+import 'gemini_service.dart';
 
 class WaterQualityResult {
   final WaterQualityState quality;
@@ -36,6 +37,7 @@ class WaterAnalysisResult {
 
 class ApiService {
   final String baseUrl;
+  late GeminiService _geminiService;
   
   // FIXED: Google Maps API configuration - Set to null if you don't have a real key
   // static const String? _googleMapsApiKey = null; // Change to your real API key or keep as null
@@ -43,9 +45,12 @@ class ApiService {
   // Alternative: If you have a real key, replace null with your key:
   static const String? _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
   
+  ApiService({required this.baseUrl}) {
+    _geminiService = GeminiService();
+  }
+  
   static const String _googleMapsBaseUrl = 'https://maps.googleapis.com/maps/api';
   
-  ApiService({required this.baseUrl});
   
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
@@ -176,6 +181,49 @@ class ApiService {
         errorMessage: "Analysis failed: ${e.toString()}",
         isLowConfidence: false,
       );
+    }
+  }
+  
+  /// ENHANCED: Combined analysis using both API and Gemini for double verification
+  Future<Map<String, dynamic>> analyzeWaterQualityWithDoubleVerification(File imageFile) async {
+    try {
+      print('🔬 Starting double verification analysis...');
+      
+      // Run API analysis first
+      final apiResult = await analyzeWaterQualityWithConfidence(imageFile);
+      print('✅ API analysis completed');
+      
+      // Run Gemini analysis in parallel
+      final geminiResult = await _geminiService.analyzeWaterQuality(imageFile);
+      print('✅ Gemini analysis completed');
+      
+      // Get combined analysis
+      final combinedResult = await _geminiService.getCombinedAnalysis(apiResult, geminiResult);
+      
+      print('📊 Combined analysis results:');
+      print('   API Confidence: ${apiResult.confidence}%');
+      print('   Gemini Confidence: ${geminiResult.confidence}%');
+      print('   Combined Confidence: ${combinedResult['combined_confidence']}%');
+      print('   Final Safety: ${combinedResult['final_safety_assessment']}');
+      print('   Agreement: ${combinedResult['agreement_level']}');
+      
+      return combinedResult;
+      
+    } catch (e) {
+      print('❌ Double verification analysis failed: $e');
+      
+      // Fallback to API-only analysis
+      final apiResult = await analyzeWaterQualityWithConfidence(imageFile);
+      
+      return {
+        'api_result': apiResult,
+        'gemini_result': null,
+        'combined_confidence': apiResult.confidence,
+        'final_safety_assessment': 'API Only',
+        'agreement_level': 'Single Analysis',
+        'recommendation': 'Gemini analysis failed, using API results only.',
+        'error': e.toString(),
+      };
     }
   }
   

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'config/theme.dart';
+import 'screens/splash_screen.dart'; // Import the splash screen
 import 'screens/simplified/role_selection_screen.dart';
 import 'services/database_service.dart';
 import 'services/storage_service.dart';
@@ -51,7 +52,7 @@ class MyApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        home: RoleSelectionScreen(),
+        home: const SplashScreen(), // Changed from RoleSelectionScreen to SplashScreen
         debugShowCheckedModeBanner: false,
       ),
     );

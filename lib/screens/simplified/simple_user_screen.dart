@@ -6,9 +6,10 @@ import '../../services/database_service.dart';
 import '../../services/api_service.dart';
 import '../../screens/simplified/role_selection_screen.dart';
 import '../../screens/simplified/simple_report_screen.dart';
+import '../../screens/simplified/community_dashboard_screen.dart';
 
 class SimpleUserScreen extends StatefulWidget {
-  const SimpleUserScreen({Key? key}) : super(key: key);
+  const SimpleUserScreen({super.key});
 
   @override
   _SimpleUserScreenState createState() => _SimpleUserScreenState();
@@ -129,7 +130,6 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
                 Colors.blue,
@@ -143,33 +143,34 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
         opacity: _fadeAnimation,
         child: SlideTransition(
           position: _slideAnimation,
-          child: SingleChildScrollView(
+          child: Container(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Welcome Header
-                _buildWelcomeHeader(),
-                
-                const SizedBox(height: 24),
-                
-                // Main Action — Report Issue
-                _buildMainActionSection(),
-                
-                const SizedBox(height: 24),
-                
-                // How It Works Section
-                _buildHowItWorksSection(),
-                
-                const SizedBox(height: 24),
-                
-                // Features Section
-                _buildFeaturesSection(),
+                // Content in a scrollable container
+                Expanded(
+                  child: ListView(
+                    children: [
+                      // Welcome Header
+                      _buildWelcomeHeader(),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Main Action — Report Issue
+                      _buildMainActionSection(),
+                      
+                      const SizedBox(height: 24),
+                      
 
-                const SizedBox(height: 24),
-
-                // Water Classification Info Section
-                _buildWaterClassificationInfoSection(),
+                      // Water Classification Info Section
+                      _buildWaterClassificationInfoSection(),
+                      
+                      // Add bottom padding for better scrolling
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -331,7 +332,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
+                  const Text(
                     'Notice Water Issue? — Together We Helps Authorities Safeguard Your Community',
                     style: TextStyle(
                       color: AppTheme.textSecondaryColor,
@@ -362,12 +363,12 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.add, color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                        const Text(
+                        Icon(Icons.add, color: Colors.white, size: 18),
+                        SizedBox(width: 8),
+                        Text(
                           'Start Report',
                           style: TextStyle(
                             color: Colors.white,
@@ -410,9 +411,9 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
         
         _buildStepCard(
           step: 2,
-          title: 'AI Analysis',
-          description: 'Our advanced AI analyzes water quality automatically',
-          icon: Icons.psychology,
+          title: 'Double AI Verification',
+          description: 'Two AI models analyze water quality for enhanced accuracy',
+          icon: Icons.verified,
           color: Colors.purple,
         ),
         
@@ -504,7 +505,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
                     const SizedBox(height: 4),
                     Text(
                       description,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.textSecondaryColor,
                         fontSize: 13,
                         height: 1.3,
@@ -537,9 +538,9 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
           children: [
             Expanded(
               child: _buildFeatureCard(
-                'AI Powered',
-                'Advanced machine learning for water quality analysis',
-                Icons.psychology,
+                'Double AI Verification',
+                'Two AI models for enhanced accuracy and safety assessment',
+                Icons.verified,
                 Colors.purple,
               ),
             ),
@@ -577,6 +578,97 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
               ),
             ),
           ],
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // Community Dashboard Button
+        Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>  const CommunityDashboardScreen(),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.blue.shade50,
+                    Colors.blue.shade100.withOpacity(0.3),
+                  ],
+                ),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.blue, Colors.blue.shade700],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.dashboard,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Community Dashboard',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'View water issues in your community, track trends, and see the impact of reports',
+                          style: TextStyle(
+                            color: Colors.blue.shade800,
+                            fontSize: 12,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    color: Colors.blue.shade400,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -641,8 +733,8 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: const [
+            const Row(
+              children: [
                 Icon(Icons.science, color: Colors.blue, size: 28),
                 SizedBox(width: 10),
                 Text(
@@ -673,12 +765,6 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
               title: 'Low pH (<6.5)',
               description:
                   'Water is acidic. Can corrode pipes, leach metals, and taste sour or metallic.',
-            ),
-            _buildWaterInfoTile(
-              icon: Icons.warning,
-              title: 'Why pH Changes?',
-              description:
-                  'pH can change due to pollution, soil/rock types, or industrial waste. Regular monitoring is important.',
             ),
           ],
         ),
@@ -728,11 +814,11 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: Row(
+          title: const Row(
             children: [
               Icon(Icons.swap_horiz, color: Colors.blue),
-              const SizedBox(width: 8),
-              const Text('Switch Role'),
+              SizedBox(width: 8),
+              Text('Switch Role'),
             ],
           ),
           content: const Text(

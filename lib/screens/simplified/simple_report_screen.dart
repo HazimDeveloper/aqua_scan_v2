@@ -12,7 +12,9 @@ import '../../services/database_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/location_service.dart';
 import '../../services/api_service.dart';
+import '../../services/gemini_service.dart';
 import '../../utils/water_quality_utils.dart';
+import '../../utils/complaint_utils.dart';
 import '../../widgets/common/custom_loader.dart';
 
 class SimpleReportScreen extends StatefulWidget {
@@ -34,9 +36,16 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   final _addressController = TextEditingController();
   final _reporterNameController = TextEditingController();
   
+  // Page controller for multi-step form
+  late PageController _pageController;
+  int _currentPage = 0;
+  
   List<File> _imageFiles = [];
   List<String> _savedImagePaths = [];
   final int _maxImages = 10;
+  
+  // Complaint type dropdown selection
+  ComplaintType? _selectedComplaintType;
   
   bool _isLoading = false;
   bool _isDetecting = false;
@@ -53,6 +62,9 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   bool _isLowConfidence = false;
   bool _canSubmitWithLowConfidence = false; // NEW: Allow submission even with low confidence
   
+  // ENHANCED: Double Detection results
+  Map<String, dynamic>? _combinedAnalysisResult;
+  
   late DatabaseService _databaseService;
   late StorageService _storageService;
   late LocationService _locationService;
@@ -68,6 +80,9 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     _storageService = Provider.of<StorageService>(context, listen: false);
     _locationService = Provider.of<LocationService>(context, listen: false);
     _apiService = Provider.of<ApiService>(context, listen: false);
+    
+    // Initialize page controller for multi-step form
+    _pageController = PageController(initialPage: 0);
     
     _reporterNameController.text = widget.isAdmin ? 'Admin User' : 'Test User';
     
@@ -256,13 +271,13 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     }
   }
 
-  // ENHANCED: Water quality detection with comprehensive error handling
+  // ENHANCED: Water quality detection with double Detection (API + Gemini)
   Future<void> _detectWaterQuality(File image) async {
     try {
       _resetAnalysisState();
       setState(() => _isDetecting = true);
       
-      print('🔬 Starting enhanced water quality detection...');
+      print('🔬 Starting Detection water quality detection...');
       
       // Validate image file
       if (!await image.exists()) {
@@ -282,47 +297,63 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         throw Exception('Backend server is not running. Please start the Python server.');
       }
       
-      print('✅ Backend connected, analyzing image...');
+      print('✅ Backend connected, starting  Detection analysis...');
       
-      // Analyze water quality with comprehensive error handling
-      final result = await _apiService.analyzeWaterQualityWithConfidence(image);
+      // Analyze water quality with double Detection (API + Gemini)
+      final combinedResult = await _apiService.analyzeWaterQualityWithDoubleVerification(image);
       
-      print('📊 Analysis result:');
-      print('   Water detected: ${result.waterDetected}');
-      print('   Quality: ${result.waterQuality}');
-      print('   Confidence: ${result.confidence}%');
-      print('   Low confidence: ${result.isLowConfidence}');
+      final apiResult = combinedResult['api_result'] as WaterAnalysisResult;
+      final geminiResult = combinedResult['gemini_result'] as GeminiAnalysisResult?;
+      
+      print('📊 Detection results:');
+      print('   API Water detected: ${apiResult.waterDetected}');
+      print('   API Quality: ${apiResult.waterQuality}');
+      print('   API Confidence: ${apiResult.confidence}%');
+      if (geminiResult != null) {
+        print('   Water detected: ${geminiResult.waterDetected}');
+        print('    Safety: ${geminiResult.isSafe}');
+        print('    Confidence: ${geminiResult.confidence}%');
+      }
+      print('   Final Safety: ${combinedResult['final_safety_assessment']}');
+      print('   Agreement: ${combinedResult['agreement_level']}');
       
       setState(() {
-        _waterDetected = result.waterDetected;
-        _confidence = result.confidence;
-        _originalClass = result.originalClass;
+        _waterDetected = apiResult.waterDetected;
+        _confidence = combinedResult['combined_confidence'] as double;
+        _originalClass = apiResult.originalClass;
         _analysisCompleted = true;
         _isDetecting = false;
-        _isLowConfidence = result.isLowConfidence;
-        _canSubmitWithLowConfidence = true; // ENHANCED: Always allow submission
+        _isLowConfidence = apiResult.isLowConfidence;
+        _canSubmitWithLowConfidence = true;
+        
+        // Store combined results for display
+        _combinedAnalysisResult = combinedResult;
       });
       
       // ENHANCED: Handle all possible scenarios without blocking submission
-      _handleAnalysisResult(result);
+      _handleAnalysisResult(apiResult, combinedResult);
       
     } catch (e) {
-      print('❌ Analysis failed: $e');
+      print('❌  Detection analysis failed: $e');
       
       setState(() {
         _isDetecting = false;
         _analysisCompleted = true;
         _detectionError = e.toString();
-        _canSubmitWithLowConfidence = true; // ENHANCED: Allow submission even on error
+        _canSubmitWithLowConfidence = true;
       });
       
       _handleAnalysisError(e);
     }
   }
   
-  // ENHANCED: Handle analysis results without blocking user
-  void _handleAnalysisResult(WaterAnalysisResult result) {
-    if (!result.waterDetected) {
+  // ENHANCED: Handle analysis results with double Detection
+  void _handleAnalysisResult(WaterAnalysisResult apiResult, Map<String, dynamic> combinedResult) {
+    final finalSafety = combinedResult['final_safety_assessment'] as String;
+    final recommendation = combinedResult['recommendation'] as String;
+    final agreementLevel = combinedResult['agreement_level'] as String;
+    
+    if (!apiResult.waterDetected) {
       // NO WATER DETECTED
       _showMessage(
         'No water detected in image. You can still submit the report, but consider adding photos that clearly show water.',
@@ -330,12 +361,35 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         duration: 6,
       );
       
-    } else if (result.isLowConfidence) {
+    } else if (apiResult.isLowConfidence) {
       // LOW CONFIDENCE BUT DETECTED
-     
+      _showMessage(
+        'Low confidence analysis completed. Detection provides additional assessment.',
+        isError: false,
+        duration: 6,
+      );
       
-    } else if (result.confidence != null && result.confidence! > 0) {
-
+    } else if (apiResult.confidence != null && apiResult.confidence! > 0) {
+      // SUCCESSFUL ANALYSIS
+      if (finalSafety == 'Likely Safe') {
+        _showMessage(
+          ' Detection completed! Both analyses indicate safe water quality.',
+          isError: false,
+          duration: 6,
+        );
+      } else if (finalSafety == 'Likely Unsafe') {
+        _showMessage(
+          'Detection completed! Both analyses indicate potential water quality issues.',
+          isError: false,
+          duration: 6,
+        );
+      } else {
+        _showMessage(
+          'Detection completed with mixed results. Manual Detection recommended.',
+          isError: false,
+          duration: 6,
+        );
+      }
       
     } else {
       // ANALYSIS FAILED BUT WATER DETECTED
@@ -377,6 +431,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       _detectionError = null;
       _isLowConfidence = false;
       _canSubmitWithLowConfidence = false;
+      _combinedAnalysisResult = null;
     });
   }
   
@@ -445,6 +500,12 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         isResolved: false,
         createdAt: now,
         updatedAt: now,
+        // New complaint fields
+        complaintType: _selectedComplaintType ?? ComplaintType.poorQuality,
+        priority: _selectedComplaintType != null 
+            ? ReportModel.getPriorityFromComplaintType(_selectedComplaintType!) 
+            : ComplaintPriority.medium,
+        status: ComplaintStatus.new_,
       );
       
       final reportId = await _databaseService.createReport(report);
@@ -523,7 +584,14 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     String baseMessage = 'Report submitted successfully with $imageCount image${imageCount == 1 ? '' : 's'}!';
     
     if (_analysisCompleted && _waterDetected && _confidence != null) {
-      if (_isLowConfidence) {
+      if (_combinedAnalysisResult != null) {
+        final finalSafety = _combinedAnalysisResult!['final_safety_assessment'] as String;
+        final agreementLevel = _combinedAnalysisResult!['agreement_level'] as String;
+        
+        baseMessage += '\nDetection completed with ${_confidence!.toStringAsFixed(1)}% combined confidence.';
+        baseMessage += '\nFinal assessment: $finalSafety';
+        baseMessage += '\nAgreement level: $agreementLevel';
+      } else if (_isLowConfidence) {
         baseMessage += '\nSubmitted with low confidence analysis (${_confidence!.toStringAsFixed(1)}%).';
       } else if (_confidence! >= 80) {
         baseMessage += '\nHigh confidence analysis included (${_confidence!.toStringAsFixed(1)}%).';
@@ -596,7 +664,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       ),
       body: _isLoading && !_isSavingImages
         ? Center(child: WaterFillLoader(message: 'Getting your location...'))
-        : SingleChildScrollView(
+        : Container(
             padding: const EdgeInsets.all(16.0),
             child: Form(
               key: _formKey,
@@ -604,11 +672,32 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (widget.isAdmin) _buildAdminIndicator(),
-                  _buildImageSection(themeColor),
-                  const SizedBox(height: 16),
-                  _buildDetailsSection(),
-                  const SizedBox(height: 24),
-                  _buildSubmitButton(themeColor),
+                  
+                  // Step indicator
+                  _buildStepIndicator(themeColor),
+                  
+                  // Page view for multi-step form
+                  Expanded(
+                    child: PageView(
+                      controller: _pageController,
+                      physics: NeverScrollableScrollPhysics(), // Disable swiping
+                      onPageChanged: (int page) {
+                        setState(() {
+                          _currentPage = page;
+                        });
+                      },
+                      children: [
+                        // Page 1: Photo Upload
+                        _buildPhotoUploadPage(themeColor),
+                        
+                        // Page 2: Form Details
+                        _buildFormDetailsPage(themeColor),
+                      ],
+                    ),
+                  ),
+                  
+                  // Navigation buttons
+                  _buildNavigationButtons(themeColor),
                 ],
               ),
             ),
@@ -616,9 +705,79 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
   
-  // ENHANCED: Better status indicators
-  Widget _buildImageSection(Color themeColor) {
-    return Column(
+  // Step indicator to show current progress
+  Widget _buildStepIndicator(Color themeColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Row(
+        children: [
+          _buildStepCircle(0, 'Photos', themeColor),
+          _buildStepConnector(_currentPage > 0, themeColor),
+          _buildStepCircle(1, 'Details', themeColor),
+        ],
+      ),
+    );
+  }
+  
+  // Individual step circle for the step indicator
+  Widget _buildStepCircle(int step, String label, Color themeColor) {
+    final isActive = _currentPage >= step;
+    final isCurrent = _currentPage == step;
+    
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: isActive ? themeColor : Colors.grey.shade300,
+              shape: BoxShape.circle,
+              border: isCurrent ? Border.all(color: themeColor, width: 3) : null,
+              boxShadow: isCurrent ? [
+                BoxShadow(
+                  color: themeColor.withOpacity(0.3),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                )
+              ] : null,
+            ),
+            child: Center(
+              child: Text(
+                '${step + 1}',
+                style: TextStyle(
+                  color: isActive ? Colors.white : Colors.grey.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? themeColor : Colors.grey.shade600,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Connector line between step circles
+  Widget _buildStepConnector(bool isActive, Color themeColor) {
+    return Container(
+      width: 60,
+      height: 4,
+      color: isActive ? themeColor : Colors.grey.shade300,
+    );
+  }
+  
+  // Page 1: Photo Upload
+  Widget _buildPhotoUploadPage(Color themeColor) {
+    return ListView(
       children: [
         // Header Card
         Card(
@@ -642,7 +801,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(12)),
-                        child: Icon(Icons.analytics, color: Colors.white, size: 24),
+                        child: Icon(Icons.photo_camera, color: Colors.white, size: 24),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -650,24 +809,19 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.isAdmin ? 'AI Analysis' : 'Smart Water Detection',
+                              'Upload Photos',
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '${_imageFiles.length}/$_maxImages photos added',
+                              'Take photos of the water issue (optional)',
                               style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                             ),
                           ],
                         ),
                       ),
-                     
-                  
                     ],
                   ),
-                  
-                  const SizedBox(height: 16),
-                  
                 ],
               ),
             ),
@@ -678,11 +832,42 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         
         // Photos Grid
         if (_imageFiles.isNotEmpty) _buildPhotosGrid(themeColor),
+        
         // Analysis Results
         if (_isDetecting) _buildAnalyzingCard(themeColor)
         else if (_analysisCompleted) _buildAnalysisResultCard(themeColor)
         else if (_imageFiles.isNotEmpty) _buildAnalysisPrompt(themeColor),
+        
+        // Camera Button
         _buildCameraButton(themeColor),
+        
+        const SizedBox(height: 16),
+        
+        // Skip Photos Info Card
+        if (_imageFiles.isEmpty)
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade300, size: 32),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No Photos Added',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You can continue without adding photos, but adding photos helps us better analyze the water issue.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -923,12 +1108,29 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Water Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+              Text('Detection Analysis', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
               const SizedBox(height: 8),
               Text(
-                'AI is analyzing your image with error handling. All scenarios are supported.',
+                'AI models are analyzing your image for enhanced accuracy and safety assessment.',
                 style: TextStyle(color: Colors.blue.shade600, fontSize: 14),
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(8)),
+                    child: Text('API Model', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                  ),
+                  SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.purple.shade100, borderRadius: BorderRadius.circular(8)),
+                    child: Text('AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade700)),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               Container(
@@ -939,7 +1141,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   children: [
                     Container(width: 8, height: 8, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
                     const SizedBox(width: 8),
-                    Text('Waiting For Detection ... ', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
+                    Text('Detection in Progress...', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -973,10 +1175,10 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 child: Icon(Icons.psychology, size: 40, color: themeColor),
               ),
               const SizedBox(height: 16),
-              Text('Ready for Water Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
+              Text('Ready for Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
               const SizedBox(height: 8),
               Text(
-                'Your photos are ready for AI analysis . Analysis will work even with challenging images.',
+                'Your photos are ready for enhanced analysis using AI models for better accuracy and safety assessment.',
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.4),
                 textAlign: TextAlign.center,
               ),
@@ -985,8 +1187,8 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () => _detectWaterQuality(_imageFiles.first),
-                  icon: Icon(Icons.search, size: 24),
-                  label: Text('Start Water Detection', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  icon: Icon(Icons.verified, size: 24),
+                  label: Text('Start Detection', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeColor,
                     foregroundColor: Colors.white,
@@ -1003,7 +1205,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  // ENHANCED: Comprehensive analysis result display
+  // ENHANCED: Comprehensive analysis result display with double Detection
   Widget _buildAnalysisResultCard(Color themeColor) {
     if (!_analysisCompleted) return Container();
     
@@ -1028,13 +1230,41 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              
+              // Header with double Detection indicator
+              Row(
+                children: [
+                  Icon(Icons.verified, color: Colors.blue, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    'Detection Analysis',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+                  ),
+                  Spacer(),
+                  if (_combinedAnalysisResult != null)
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'AI Models',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue),
+                      ),
+                    ),
+                ],
+              ),
               
               const SizedBox(height: 24),
               
               // Main result content
               _buildResultContent(resultColor),
+              
+              const SizedBox(height: 16),
+              
+              // ENHANCED: Double Detection details
+              if (_combinedAnalysisResult != null)
+                _buildDoubleDetectionDetails(),
               
               const SizedBox(height: 16),
               
@@ -1287,6 +1517,170 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     if (confidence >= 60) return Colors.deepOrange.shade600;
     return Colors.red.shade600;
   }
+  
+  // ENHANCED: Build double Detection details
+  Widget _buildDoubleDetectionDetails() {
+    if (_combinedAnalysisResult == null) return Container();
+    
+    final apiResult = _combinedAnalysisResult!['api_result'] as WaterAnalysisResult;
+    final geminiResult = _combinedAnalysisResult!['gemini_result'] as GeminiAnalysisResult?;
+    final finalSafety = _combinedAnalysisResult!['final_safety_assessment'] as String;
+    final agreementLevel = _combinedAnalysisResult!['agreement_level'] as String;
+    final recommendation = _combinedAnalysisResult!['recommendation'] as String;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.compare_arrows, color: Colors.blue, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Double Detection Results',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          
+          // API Results
+          _buildAnalysisComparisonRow(
+            'API Analysis',
+            apiResult.waterDetected ? 'Water Detected' : 'No Water',
+            apiResult.confidence,
+            apiResult.waterQuality == WaterQualityState.optimum ? 'Safe' : 'Needs Attention',
+            Colors.green,
+          ),
+          
+          SizedBox(height: 8),
+          
+          // Gemini Results
+          if (geminiResult != null)
+            _buildAnalysisComparisonRow(
+              'Analysis',
+              geminiResult.waterDetected ? 'Water Detected' : 'No Water',
+              geminiResult.confidence,
+              geminiResult.isSafe ? 'Safe' : 'Unsafe',
+              Colors.purple,
+            ),
+          
+          SizedBox(height: 12),
+          
+          // Final Assessment
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _getFinalSafetyColor(finalSafety).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _getFinalSafetyColor(finalSafety).withOpacity(0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.security, color: _getFinalSafetyColor(finalSafety), size: 18),
+                    SizedBox(width: 8),
+                    Text(
+                      'Final Safety Assessment',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _getFinalSafetyColor(finalSafety)),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  finalSafety,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _getFinalSafetyColor(finalSafety)),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  recommendation,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+              ],
+            ),
+          ),
+          
+          SizedBox(height: 8),
+          
+          // Agreement Level
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: agreementLevel == 'High Agreement' ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Agreement: $agreementLevel',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: agreementLevel == 'High Agreement' ? Colors.green : Colors.orange,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildAnalysisComparisonRow(String title, String detection, double? confidence, String safety, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+        Text(
+          detection,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        SizedBox(width: 8),
+        if (confidence != null)
+          Text(
+            '${confidence.toStringAsFixed(1)}%',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+          ),
+        SizedBox(width: 8),
+        Text(
+          safety,
+          style: TextStyle(fontSize: 12, color: color),
+        ),
+      ],
+    );
+  }
+  
+  Color _getFinalSafetyColor(String safety) {
+    switch (safety) {
+      case 'Likely Safe':
+        return Colors.green;
+      case 'Likely Unsafe':
+        return Colors.red;
+      case 'Needs Further Assessment':
+        return Colors.orange;
+      case 'No Water Detected':
+        return Colors.grey;
+      case 'Partial Detection':
+        return Colors.amber;
+      default:
+        return Colors.blue;
+    }
+  }
 
   Widget _buildAdminIndicator() {
     return Padding(
@@ -1374,6 +1768,80 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             
             const SizedBox(height: 16),
             
+            // Complaint Type Dropdown
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey.shade400),
+              ),
+              child: DropdownButtonFormField<ComplaintType>(
+                value: _selectedComplaintType,
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.report_problem),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                hint: Text('Select Complaint Type *'),
+                isExpanded: true,
+                icon: Icon(Icons.arrow_drop_down),
+                items: ComplaintUtils.getAllComplaintTypes().map((ComplaintType type) {
+                  final color = ComplaintUtils.getComplaintTypeColor(type);
+                  return DropdownMenuItem<ComplaintType>(
+                    value: type,
+                    child: Row(
+                      children: [
+                        Icon(ComplaintUtils.getComplaintTypeIcon(type), color: color, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            ComplaintUtils.getComplaintTypeText(type),
+                            style: TextStyle(color: Colors.black87),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: ComplaintUtils.getComplaintPriorityColor(
+                              ReportModel.getPriorityFromComplaintType(type)
+                            ).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            ComplaintUtils.getComplaintPriorityText(
+                              ReportModel.getPriorityFromComplaintType(type)
+                            ),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: ComplaintUtils.getComplaintPriorityColor(
+                                ReportModel.getPriorityFromComplaintType(type)
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (ComplaintType? newValue) {
+                  setState(() {
+                    _selectedComplaintType = newValue;
+                  });
+                },
+                validator: (value) {
+                  if (value == null) {
+                    return 'Please select a complaint type';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
             TextFormField(
               controller: _titleController,
               decoration: InputDecoration(
@@ -1441,57 +1909,137 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
   
-  Widget _buildSubmitButton(Color themeColor) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [themeColor, themeColor.withOpacity(0.8)],
+  // Page 2: Form Details
+  Widget _buildFormDetailsPage(Color themeColor) {
+    return ListView(
+      children: [
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [themeColor.withOpacity(0.1), themeColor.withOpacity(0.05)],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(12)),
+                        child: Icon(Icons.edit_note, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Report Details',
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Provide information about the water issue',
+                              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        child: ElevatedButton(
-          onPressed: (_isLoading || _isSavingImages) ? null : _submitReport,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            elevation: 0,
-          ),
-          child: _isLoading || _isSavingImages
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
-                    const SizedBox(width: 16),
-                    Text(
-                      _isSavingImages 
-                        ? 'Preparing for analysis...'
-                        : widget.isAdmin
-                          ? 'Creating admin report...'
-                          : 'Submitting report...',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+        
+        const SizedBox(height: 16),
+        
+        // Form fields
+        _buildDetailsSection(),
+        
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+  
+  // Navigation buttons for moving between steps
+  Widget _buildNavigationButtons(Color themeColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Back button (hidden on first page)
+          _currentPage > 0
+              ? ElevatedButton.icon(
+                  onPressed: () {
+                    _pageController.previousPage(
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  },
+                  icon: Icon(Icons.arrow_back),
+                  label: Text('Back'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade200,
+                    foregroundColor: Colors.black87,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
                 )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(widget.isAdmin ? Icons.admin_panel_settings : Icons.send, size: 24),
-                    const SizedBox(width: 12),
-                    Text(
-                      widget.isAdmin ? 'Report Water Issue' : 'Report Water Issue',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-        ),
+              : SizedBox(width: 100), // Empty space to maintain layout
+          
+          // Next/Skip button (on first page) or Submit button (on last page)
+          _currentPage == 0
+              ? ElevatedButton.icon(
+                  onPressed: () {
+                    _pageController.nextPage(
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  },
+                  icon: Text(_imageFiles.isEmpty ? 'Skip' : 'Next'),
+                  label: Icon(_imageFiles.isEmpty ? Icons.skip_next : Icons.arrow_forward),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                )
+              : _buildSubmitButton(themeColor),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSubmitButton(Color themeColor) {
+    return ElevatedButton.icon(
+      onPressed: (_isLoading || _isSavingImages) ? null : _submitReport,
+      icon: Icon(widget.isAdmin ? Icons.admin_panel_settings : Icons.send, size: 24),
+      label: Text(
+        _isLoading || _isSavingImages
+            ? (_isSavingImages 
+                ? 'Preparing...'
+                : widget.isAdmin
+                    ? 'Creating...'
+                    : 'Submitting...')
+            : (widget.isAdmin ? 'Report Water Issue' : 'Report Water Issue'),
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: themeColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -1502,6 +2050,8 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     _descriptionController.dispose();
     _addressController.dispose();
     _reporterNameController.dispose();
+    _pageController.dispose();
+    // Clean up any other resources if needed
     super.dispose();
   }
 }

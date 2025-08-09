@@ -1,5 +1,5 @@
-// lib/models/report_model.dart - FIXED FOR LOCAL STORAGE ONLY
-// Removed all Firebase dependencies
+// lib/models/report_model.dart - ENHANCED FOR WATER COMPLAINT SYSTEM
+// Removed all Firebase dependencies and added complaint types
 
 enum WaterQualityState {
   highPh,       // 'HIGH_PH'
@@ -9,6 +9,32 @@ enum WaterQualityState {
   lowTempHighPh,// 'LOW_TEMP;HIGH_PH'
   optimum,      // 'OPTIMUM'
   unknown       // Default fallback
+}
+
+enum ComplaintType {
+  billingIssues,    // Low priority - Yellow
+  supplyDisruption, // High priority - Red
+  poorQuality,      // Medium priority - Orange
+  pollution,        // High priority - Red
+  leakingPipes,     // Medium priority - Orange
+  lowPressure,      // Medium priority - Orange
+  noAccess,         // Low priority - Yellow
+  chemicalSpill,    // Critical priority - Purple
+  other             // Default - Blue
+}
+
+enum ComplaintPriority {
+  low,      // Yellow
+  medium,   // Orange
+  high,     // Red
+  critical  // Purple
+}
+
+enum ComplaintStatus {
+  new_,     // Just reported
+  inProgress, // Being addressed
+  resolved,   // Issue fixed
+  closed      // Closed without resolution
 }
 
 class GeoPoint {
@@ -68,6 +94,14 @@ class ReportModel {
   final bool isResolved;
   final DateTime createdAt;
   final DateTime updatedAt;
+  
+  // New fields for water complaint system
+  final ComplaintType complaintType;
+  final ComplaintPriority priority;
+  final ComplaintStatus status;
+  final String? assignedTo;
+  final DateTime? resolvedAt;
+  final String? resolutionNotes;
 
   ReportModel({
     required this.id,
@@ -82,7 +116,34 @@ class ReportModel {
     required this.isResolved,
     required this.createdAt,
     required this.updatedAt,
+    this.complaintType = ComplaintType.other,
+    this.priority = ComplaintPriority.medium,
+    this.status = ComplaintStatus.new_,
+    this.assignedTo,
+    this.resolvedAt,
+    this.resolutionNotes,
   });
+  
+  // Get priority color based on complaint type
+  static ComplaintPriority getPriorityFromComplaintType(ComplaintType type) {
+    switch (type) {
+      case ComplaintType.supplyDisruption:
+      case ComplaintType.pollution:
+        return ComplaintPriority.high;
+      case ComplaintType.poorQuality:
+      case ComplaintType.leakingPipes:
+      case ComplaintType.lowPressure:
+        return ComplaintPriority.medium;
+      case ComplaintType.billingIssues:
+      case ComplaintType.noAccess:
+        return ComplaintPriority.low;
+      case ComplaintType.chemicalSpill:
+        return ComplaintPriority.critical;
+      case ComplaintType.other:
+      default:
+        return ComplaintPriority.medium;
+    }
+  }
 
   static WaterQualityState getStateFromString(String stateString) {
     switch (stateString.toUpperCase()) {
@@ -167,6 +228,57 @@ class ReportModel {
         }
       }
       
+      // Parse complaint type
+      ComplaintType complaintType = ComplaintType.other;
+      if (json['complaintType'] != null) {
+        final complaintTypeValue = json['complaintType'];
+        if (complaintTypeValue is int) {
+          if (complaintTypeValue >= 0 && complaintTypeValue < ComplaintType.values.length) {
+            complaintType = ComplaintType.values[complaintTypeValue];
+          }
+        }
+      }
+      
+      // Parse priority
+      ComplaintPriority priority = getPriorityFromComplaintType(complaintType);
+      if (json['priority'] != null) {
+        final priorityValue = json['priority'];
+        if (priorityValue is int) {
+          if (priorityValue >= 0 && priorityValue < ComplaintPriority.values.length) {
+            priority = ComplaintPriority.values[priorityValue];
+          }
+        }
+      }
+      
+      // Parse status
+      ComplaintStatus status = ComplaintStatus.new_;
+      if (json['status'] != null) {
+        final statusValue = json['status'];
+        if (statusValue is int) {
+          if (statusValue >= 0 && statusValue < ComplaintStatus.values.length) {
+            status = ComplaintStatus.values[statusValue];
+          }
+        }
+      } else {
+        // For backward compatibility
+        status = json['isResolved'] == true ? ComplaintStatus.resolved : ComplaintStatus.new_;
+      }
+      
+      // Parse resolvedAt
+      DateTime? resolvedAt;
+      if (json['resolvedAt'] != null) {
+        final resolvedAtValue = json['resolvedAt'];
+        if (resolvedAtValue is String) {
+          try {
+            resolvedAt = DateTime.parse(resolvedAtValue);
+          } catch (e) {
+            print('Error parsing resolvedAt string: $e');
+          }
+        } else if (resolvedAtValue is int) {
+          resolvedAt = DateTime.fromMillisecondsSinceEpoch(resolvedAtValue);
+        }
+      }
+      
       return ReportModel(
         id: json['id']?.toString() ?? '',
         userId: json['userId']?.toString() ?? '',
@@ -184,6 +296,12 @@ class ReportModel {
         isResolved: json['isResolved'] == true,
         createdAt: createdAt,
         updatedAt: updatedAt,
+        complaintType: complaintType,
+        priority: priority,
+        status: status,
+        assignedTo: json['assignedTo']?.toString(),
+        resolvedAt: resolvedAt,
+        resolutionNotes: json['resolutionNotes']?.toString(),
       );
     } catch (e, stackTrace) {
       print('Error in ReportModel.fromJson: $e');
@@ -208,7 +326,7 @@ class ReportModel {
     }
   }
 
-  // FIXED: Store dates as ISO strings for local storage
+  // ENHANCED: Store dates as ISO strings for local storage with new complaint fields
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -223,6 +341,12 @@ class ReportModel {
       'isResolved': isResolved,
       'createdAt': createdAt.toIso8601String(), // Store as ISO string
       'updatedAt': updatedAt.toIso8601String(), // Store as ISO string
+      'complaintType': complaintType.index,
+      'priority': priority.index,
+      'status': status.index,
+      'assignedTo': assignedTo,
+      'resolvedAt': resolvedAt?.toIso8601String(),
+      'resolutionNotes': resolutionNotes,
     };
   }
 
@@ -239,6 +363,12 @@ class ReportModel {
     bool? isResolved,
     DateTime? createdAt,
     DateTime? updatedAt,
+    ComplaintType? complaintType,
+    ComplaintPriority? priority,
+    ComplaintStatus? status,
+    String? assignedTo,
+    DateTime? resolvedAt,
+    String? resolutionNotes,
   }) {
     return ReportModel(
       id: id ?? this.id,
@@ -253,6 +383,12 @@ class ReportModel {
       isResolved: isResolved ?? this.isResolved,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      complaintType: complaintType ?? this.complaintType,
+      priority: priority ?? this.priority,
+      status: status ?? this.status,
+      assignedTo: assignedTo ?? this.assignedTo,
+      resolvedAt: resolvedAt ?? this.resolvedAt,
+      resolutionNotes: resolutionNotes ?? this.resolutionNotes,
     );
   }
 }
