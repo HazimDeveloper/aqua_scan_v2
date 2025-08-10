@@ -12,7 +12,7 @@ import '../../utils/complaint_utils.dart';
 import '../../widgets/admin/google_maps_widget.dart';
 
 class CommunityDashboardScreen extends StatefulWidget {
-  const CommunityDashboardScreen({Key? key}) : super(key: key);
+  const CommunityDashboardScreen({super.key});
 
   @override
   _CommunityDashboardScreenState createState() => _CommunityDashboardScreenState();
@@ -417,7 +417,7 @@ class _CommunityDashboardScreenState extends State<CommunityDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  const Text(
                     'Community Water Issues',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
@@ -467,7 +467,7 @@ class _CommunityDashboardScreenState extends State<CommunityDashboardScreen> {
           ),
         ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 12)),
+        Text(label, style: const TextStyle(fontSize: 12)),
       ],
     );
   }
@@ -509,7 +509,7 @@ class _CommunityDashboardScreenState extends State<CommunityDashboardScreen> {
                     Navigator.pop(context);
                   },
                 );
-              }).toList(),
+              }),
             ],
           ),
         ),
@@ -564,7 +564,7 @@ class _CommunityDashboardScreenState extends State<CommunityDashboardScreen> {
                     Navigator.pop(context);
                   },
                 );
-              }).toList(),
+              }),
             ],
           ),
         ),

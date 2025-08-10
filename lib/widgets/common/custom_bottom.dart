@@ -32,7 +32,7 @@ class CustomButton extends StatelessWidget {
   final double borderRadius;
 
   const CustomButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.type = CustomButtonType.primary,
@@ -44,7 +44,7 @@ class CustomButton extends StatelessWidget {
     this.width,
     this.height,
     this.borderRadius = 12.0,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -180,12 +180,12 @@ class CustomButton extends StatelessWidget {
         children: isIconLeading
             ? [
                 iconWidget,
-                SizedBox(width: 8.0),
+                const SizedBox(width: 8.0),
                 textWidget,
               ]
             : [
                 textWidget,
-                SizedBox(width: 8.0),
+                const SizedBox(width: 8.0),
                 iconWidget,
               ],
       );
@@ -244,14 +244,14 @@ class WaterButton extends StatefulWidget {
   final double? width;
 
   const WaterButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.size = CustomButtonSize.medium,
     this.isLoading = false,
     this.isFullWidth = false,
     this.width,
-  }) : super(key: key);
+  });
 
   @override
   _WaterButtonState createState() => _WaterButtonState();
@@ -361,9 +361,9 @@ class _WaterButtonState extends State<WaterButton> with SingleTickerProviderStat
                   ? SizedBox(
                       height: fontSize + 8,
                       width: fontSize + 8,
-                      child: CircularProgressIndicator(
+                      child: const CircularProgressIndicator(
                         strokeWidth: 2.0,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   : Row(

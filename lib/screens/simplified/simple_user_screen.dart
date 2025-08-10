@@ -122,7 +122,7 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              _showRoleSwitchDialog();
+              _showSettingsDialog();
             },
             tooltip: 'Switch Role',
           ),
@@ -806,50 +806,34 @@ class _SimpleUserScreenState extends State<SimpleUserScreen>
     );
   }
 
-  void _showRoleSwitchDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Row(
-            children: [
-              Icon(Icons.swap_horiz, color: Colors.blue),
-              SizedBox(width: 8),
-              Text('Switch Role'),
-            ],
-          ),
-          content: const Text(
-            'Do you want to switch to role selection screen?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const RoleSelectionScreen(),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Switch'),
-            ),
+ void _showSettingsDialog() {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.settings, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Settings'),
           ],
-        );
-      },
-    );
-  }
+        ),
+        content: const Text(
+          'App settings and information.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
 }

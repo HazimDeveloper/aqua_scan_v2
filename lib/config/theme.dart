@@ -24,14 +24,12 @@ class AppTheme {
   // Light Theme
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
-    colorScheme: ColorScheme.light(
+    colorScheme: const ColorScheme.light(
       primary: primaryColor,
       secondary: accentColor,
-      background: backgroundColor,
       surface: backgroundColor,
       onPrimary: textLightColor,
       onSecondary: textLightColor,
-      onBackground: textPrimaryColor,
       onSurface: textPrimaryColor,
       error: errorColor,
       onError: textLightColor,

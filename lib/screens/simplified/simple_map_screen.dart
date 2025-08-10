@@ -11,12 +11,11 @@ import '../../models/report_model.dart';
 import '../../services/database_service.dart';
 import '../../services/location_service.dart';
 import '../../services/api_service.dart';
-import '../../screens/simplified/simple_admin_screen.dart';
 import '../../screens/simplified/simple_report_screen.dart';
 import '../../screens/simplified/role_selection_screen.dart';
 
 class SimpleMapScreen extends StatefulWidget {
-  const SimpleMapScreen({Key? key}) : super(key: key);
+  const SimpleMapScreen({super.key});
 
   @override
   _SimpleMapScreenState createState() => _SimpleMapScreenState();
@@ -29,7 +28,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
   // static const String? _googleMapsApiKey = null; // Set to your real API key or keep as null
   
   // Alternative: If you have a real key, replace null with your key:
-  static const String? _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
+  static const String _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
 
   AnimationController? _animationController;
   Animation<double>? _fadeAnimation;
@@ -52,7 +51,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
   int? _nearestRouteIndex;
   ReportModel? _selectedReport;
   String _routeLoadingStatus = 'Initializing...';
-  bool _showControls = true;
+  final bool _showControls = true;
   
   @override
   void initState() {
@@ -183,7 +182,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
             _currentLocation!,
             'google_driving_admin',
             maxRoutes: 10,
-          ).timeout(Duration(seconds: 35));
+          ).timeout(const Duration(seconds: 35));
           
           if (result['success'] == true && 
               (result['routes'] as List?)?.isNotEmpty == true) {
@@ -246,9 +245,9 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
               content: Text('✅ Nearest: ${nearestRoute['destination_name']} (${(nearestRoute['distance'] as double).toStringAsFixed(1)}km)'),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
-              margin: EdgeInsets.only(bottom: 100, left: 20, right: 20),
+              margin: const EdgeInsets.only(bottom: 100, left: 20, right: 20),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              duration: Duration(seconds: 4),
+              duration: const Duration(seconds: 4),
             ),
           );
         }
@@ -352,7 +351,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
             }
             
             // Delay to avoid rate limiting
-            await Future.delayed(Duration(milliseconds: 500));
+            await Future.delayed(const Duration(milliseconds: 500));
             
           } catch (e) {
             print('⚠️ Google route $i failed: $e');
@@ -392,7 +391,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
           '&key=$_googleMapsApiKey';
       
       // Make HTTP request to Google Directions API
-      final response = await http.get(Uri.parse(directionsUrl)).timeout(Duration(seconds: 10));
+      final response = await http.get(Uri.parse(directionsUrl)).timeout(const Duration(seconds: 10));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -503,7 +502,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       final routes = <Map<String, dynamic>>[];
       
       // Create some basic routes around current location
-      final baseDistance = 5.0; // 5km radius
+      const baseDistance = 5.0; // 5km radius
       
       for (int i = 0; i < 6; i++) {
         final angle = (i * 60.0) * (Math.pi / 180); // 60 degrees apart
@@ -811,8 +810,9 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
   String _calculateDrivingTime(double roadDistance) {
     double avgSpeed = 50.0; // km/h
     
-    if (roadDistance < 10) avgSpeed = 40.0;
-    else if (roadDistance > 25) avgSpeed = 70.0;
+    if (roadDistance < 10) {
+      avgSpeed = 40.0;
+    } else if (roadDistance > 25) avgSpeed = 70.0;
     
     final timeHours = roadDistance / avgSpeed;
     final timeMinutes = (timeHours * 60).round();
@@ -841,8 +841,9 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     }
     
     // Adjust for distance
-    if (roadDistance < 5) baseSpeed *= 0.8; // Urban areas
-    else if (roadDistance > 20) baseSpeed *= 1.2; // Highway speeds
+    if (roadDistance < 5) {
+      baseSpeed *= 0.8; // Urban areas
+    } else if (roadDistance > 20) baseSpeed *= 1.2; // Highway speeds
     
     final timeHours = roadDistance / baseSpeed;
     final timeMinutes = (timeHours * 60).round();
@@ -897,18 +898,18 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: CircularProgressIndicator(
+              child: const CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 strokeWidth: 3,
               ),
             ),
-            SizedBox(height: 24),
-            Text(
+            const SizedBox(height: 24),
+            const Text(
               'Loading Routes',
               style: TextStyle(
                 fontSize: 20,
@@ -916,9 +917,9 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                 color: Colors.white,
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16),
@@ -929,9 +930,9 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                 textAlign: TextAlign.center,
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             if (_backendConnected)
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.smart_toy, color: Colors.white, size: 16),
@@ -940,7 +941,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                 ],
               )
             else
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.offline_bolt, color: Colors.orange, size: 16),
@@ -992,9 +993,6 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
         if (_nearestRouteIndex != null && _allRoutes.isNotEmpty)
           _buildNearestRouteIndicator(),
         
-        // Action buttons
-        _buildActionButtons(),
-        
         // Error overlay
         if (_errorMessage != null)
           _buildErrorOverlay(),
@@ -1007,7 +1005,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       top: MediaQuery.of(context).padding.top + 12,
       left: 16,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.75),
           borderRadius: BorderRadius.circular(16),
@@ -1024,10 +1022,10 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                 shape: BoxShape.circle,
               ),
             ),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text(
               '${_allRoutes.length} routes',
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
@@ -1036,7 +1034,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
             if (_userReports.isNotEmpty) ...[
               Text(
                 ' • ${_userReports.length} reports',
-                style: TextStyle(color: Colors.white70, fontSize: 11),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
               ),
             ],
           ],
@@ -1052,7 +1050,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       top: MediaQuery.of(context).padding.top + 12,
       right: 16,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [Colors.pink.shade600, Colors.red.shade500],
@@ -1062,20 +1060,20 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
             BoxShadow(
               color: Colors.pink.withOpacity(0.3),
               blurRadius: 8,
-              offset: Offset(0, 2),
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.near_me, color: Colors.white, size: 14),
-            SizedBox(width: 6),
+            const Icon(Icons.near_me, color: Colors.white, size: 14),
+            const SizedBox(width: 6),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                const Text(
                   'NEAREST',
                   style: TextStyle(
                     color: Colors.white,
@@ -1085,7 +1083,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                 ),
                 Text(
                   '${(nearestRoute['distance'] as double).toStringAsFixed(1)}km',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1099,99 +1097,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
     );
   }
   
-  Widget _buildActionButtons() {
-    return Positioned(
-      right: 16,
-      bottom: 30,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Dashboard
-          _buildActionButton(
-            Icons.dashboard,
-            Colors.orange,
-            () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => SimpleAdminScreen()),
-              );
-            },
-          ),
-          
-          SizedBox(height: 12),
-          
-          // Add report
-          // _buildActionButton(
-          //   Icons.add_circle,
-          //   Colors.blue,
-          //   () {
-          //     Navigator.push(
-          //       context,
-          //       MaterialPageRoute(builder: (context) => SimpleReportScreen(isAdmin: true)),
-          //     );
-          //   },
-          // ),
-          //
-          // SizedBox(height: 12),
-          //
-          // // Refresh
-          // _buildActionButton(
-          //   _isLoadingRoutes ? Icons.hourglass_empty : Icons.refresh,
-          //   Colors.green,
-          //   _isLoadingRoutes ? null : () {
-          //     _initializeMapRoutes();
-          //   },
-          // ),
-          //
-          // SizedBox(height: 20),
-          
-          // Exit
-          // _buildActionButton(
-          //   Icons.close,
-          //   Colors.red,
-          //   () {
-          //     Navigator.pushReplacement(
-          //       context,
-          //       MaterialPageRoute(builder: (context) => RoleSelectionScreen()),
-          //     );
-          //   },
-          // ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildActionButton(IconData icon, Color color, VoidCallback? onPressed) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.3),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            width: 48,
-            height: 48,
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+
   
   Widget _buildErrorOverlay() {
     return Positioned(
@@ -1199,24 +1105,24 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
       left: 16,
       right: 16,
       child: Container(
-        padding: EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.red,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            Icon(Icons.error, color: Colors.white, size: 20),
-            SizedBox(width: 8),
+            const Icon(Icons.error, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 _errorMessage!,
-                style: TextStyle(color: Colors.white, fontSize: 12),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
             GestureDetector(
               onTap: () => setState(() => _errorMessage = null),
-              child: Icon(Icons.close, color: Colors.white, size: 20),
+              child: const Icon(Icons.close, color: Colors.white, size: 20),
             ),
           ],
         ),
@@ -1239,7 +1145,7 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -1250,8 +1156,8 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                   color: Colors.white.withOpacity(0.7),
                 ),
               ),
-              SizedBox(height: 24),
-              Text(
+              const SizedBox(height: 24),
+              const Text(
                 'No Routes Available',
                 style: TextStyle(
                   fontSize: 20,
@@ -1259,9 +1165,9 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                   color: Colors.white,
                 ),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16),
@@ -1277,32 +1183,32 @@ class _SimpleMapScreenState extends State<SimpleMapScreen>
                   textAlign: TextAlign.center,
                 ),
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () {
                   _initializeMapRoutes();
                 },
-                icon: Icon(Icons.refresh),
-                label: Text('Try Again'),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Try Again'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               TextButton.icon(
                 onPressed: () {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => RoleSelectionScreen()),
+                    MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
                   );
                 },
-                icon: Icon(Icons.arrow_back, color: Colors.white70),
-                label: Text(
+                icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                label: const Text(
                   'Back to Role Selection',
                   style: TextStyle(color: Colors.white70),
                 ),

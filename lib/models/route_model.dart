@@ -188,13 +188,13 @@ class RouteModel {
   RouteModel copyWith({required String id}) {
     return RouteModel(
       id: id,
-      adminId: this.adminId,
-      reportIds: this.reportIds,
-      points: this.points,
-      segments: this.segments,
-      totalDistance: this.totalDistance,
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt,
+      adminId: adminId,
+      reportIds: reportIds,
+      points: points,
+      segments: segments,
+      totalDistance: totalDistance,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     );
   }
 }

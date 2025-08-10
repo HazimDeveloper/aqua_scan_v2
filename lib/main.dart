@@ -1,9 +1,9 @@
-// lib/main.dart - COMPLETELY REMOVED FIREBASE
+// lib/main.dart - UPDATED: Direct to User Screen
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'config/theme.dart';
-import 'screens/splash_screen.dart'; // Import the splash screen
-import 'screens/simplified/role_selection_screen.dart';
+import 'screens/splash_screen.dart';
+import 'screens/simplified/simple_user_screen.dart'; // Import user screen
 import 'services/database_service.dart';
 import 'services/storage_service.dart';
 import 'services/location_service.dart';
@@ -12,16 +12,12 @@ import 'dart:io';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // REMOVED: Firebase initialization completely
-
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  // Using UiTM network IP address
   final apiBaseUrl = Platform.isAndroid 
-      ? 'http://10.62.48.206:8000'  // Your Wi-Fi IPv4 address
+      ? 'http://10.62.48.206:8000'
       : 'http://localhost:8000';
 
   MyApp({Key? key}) : super(key: key);
@@ -52,7 +48,7 @@ class MyApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        home: const SplashScreen(), // Changed from RoleSelectionScreen to SplashScreen
+        home: const SplashScreen(), // Keep splash, but it will go to user screen
         debugShowCheckedModeBanner: false,
       ),
     );

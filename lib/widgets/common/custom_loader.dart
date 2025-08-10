@@ -10,12 +10,12 @@ class WaterDropLoader extends StatefulWidget {
   final String message;
 
   const WaterDropLoader({
-    Key? key,
+    super.key,
     this.size = 100.0,
     this.color = AppTheme.primaryColor,
     this.duration = const Duration(milliseconds: 1500),
     this.message = 'Loading...',
-  }) : super(key: key);
+  });
 
   @override
   _WaterDropLoaderState createState() => _WaterDropLoaderState();
@@ -71,7 +71,7 @@ class _WaterDropLoaderState extends State<WaterDropLoader> with SingleTickerProv
         AnimatedBuilder(
           animation: _controller,
           builder: (context, child) {
-            return Container(
+            return SizedBox(
               width: widget.size,
               height: widget.size,
               child: Stack(
@@ -124,7 +124,7 @@ class _WaterDropLoaderState extends State<WaterDropLoader> with SingleTickerProv
         const SizedBox(height: 16),
         Text(
           widget.message,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.textPrimaryColor,
             fontSize: 16,
             fontWeight: FontWeight.w500,
@@ -205,12 +205,12 @@ class WaterFillLoader extends StatefulWidget {
   final String message;
 
   const WaterFillLoader({
-    Key? key,
+    super.key,
     this.size = 100.0,
     this.color = AppTheme.primaryColor,
     this.duration = const Duration(seconds: 2),
     this.message = 'Loading...',
-  }) : super(key: key);
+  });
 
   @override
   _WaterFillLoaderState createState() => _WaterFillLoaderState();
@@ -282,7 +282,7 @@ class _WaterFillLoaderState extends State<WaterFillLoader> with SingleTickerProv
         const SizedBox(height: 16),
         Text(
           widget.message,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.textPrimaryColor,
             fontSize: 16,
             fontWeight: FontWeight.w500,

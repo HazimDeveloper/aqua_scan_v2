@@ -2,10 +2,9 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import 'simple_user_screen.dart';
-import 'simple_admin_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
-  const RoleSelectionScreen({Key? key}) : super(key: key);
+  const RoleSelectionScreen({super.key});
 
   @override
   _RoleSelectionScreenState createState() => _RoleSelectionScreenState();
@@ -141,7 +140,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           ),
         ),
         const SizedBox(height: 8),
-        Text(
+        const Text(
           'Water Quality Monitoring System',
           style: TextStyle(
             fontSize: 16,
@@ -186,7 +185,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           width: 60,
           height: 3,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
+            gradient: const LinearGradient(
               colors: [
                 AppTheme.primaryColor,
                 Colors.orange,
@@ -216,17 +215,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         
         const SizedBox(height: 20),
         
-        // Admin Role Card
-        _buildRoleCard(
-          title: 'ADMIN',
-          subtitle: 'Manage reports + View routes',
-          description: 'Create detailed reports\nView polyline map with multiple water supply routes',
-          icon: Icons.admin_panel_settings,
-          color: Colors.orange,
-          onTap: () {
-            _navigateToAdminScreen();
-          },
-        ),
       ],
     );
   }
@@ -323,7 +311,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                     const SizedBox(height: 8),
                     Text(
                       description,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
                         color: AppTheme.textSecondaryColor,
                         height: 1.4,
@@ -356,7 +344,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
   Widget _buildFooterInfo() {
     return Column(
       children: [
-        Row(
+        const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
@@ -403,7 +391,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 10,
               color: AppTheme.primaryColor,
               fontWeight: FontWeight.w600,
@@ -439,28 +427,4 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     );
   }
 
-  void _navigateToAdminScreen() {
-    Navigator.pushReplacement(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => 
-             SimpleAdminScreen(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
-
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 300),
-      ),
-    );
-  }
 }

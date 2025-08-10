@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../config/theme.dart';
-import 'simplified/role_selection_screen.dart';
+import 'simplified/simple_user_screen.dart'; // Change import
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -42,10 +42,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     
     _animationController.forward();
     
-    // Navigate to the role selection screen after a delay
+    // Navigate directly to user screen
     Timer(const Duration(milliseconds: 2500), () {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
+        MaterialPageRoute(builder: (context) => const SimpleUserScreen()),
       );
     });
   }

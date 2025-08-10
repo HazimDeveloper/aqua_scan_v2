@@ -43,7 +43,7 @@ class ApiService {
   // static const String? _googleMapsApiKey = null; // Change to your real API key or keep as null
   
   // Alternative: If you have a real key, replace null with your key:
-  static const String? _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
+  static const String _googleMapsApiKey = 'AIzaSyBAu5LXTH6xw4BrThroxWxngNunfgh27bg';
   
   ApiService({required this.baseUrl}) {
     _geminiService = GeminiService();
@@ -575,8 +575,9 @@ class ApiService {
   String _calculateDrivingTime(double roadDistance) {
     double avgSpeed = 50.0; // km/h
     
-    if (roadDistance < 10) avgSpeed = 40.0;
-    else if (roadDistance > 25) avgSpeed = 70.0;
+    if (roadDistance < 10) {
+      avgSpeed = 40.0;
+    } else if (roadDistance > 25) avgSpeed = 70.0;
     
     final timeHours = roadDistance / avgSpeed;
     final timeMinutes = (timeHours * 60).round();

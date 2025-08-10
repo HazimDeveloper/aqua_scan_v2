@@ -57,7 +57,7 @@ class StorageService {
       }
       
       // STEP 3: Generate unique filename
-      final uuid = Uuid();
+      const uuid = Uuid();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final extension = path.extension(file.path).toLowerCase();
       final validExtension = ['.jpg', '.jpeg', '.png'].contains(extension) ? extension : '.jpg';
@@ -116,7 +116,7 @@ class StorageService {
       }
       
       // Generate filename
-      final uuid = Uuid();
+      const uuid = Uuid();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'water_data_${timestamp}_${uuid.v4()}.jpg';
       
@@ -231,7 +231,7 @@ class StorageService {
       
       final files = await folderDir.list().toList();
       final imagePaths = files
-          .where((file) => file is File)
+          .whereType<File>()
           .map((file) => file.path)
           .where((filePath) {
             final ext = path.extension(filePath).toLowerCase();

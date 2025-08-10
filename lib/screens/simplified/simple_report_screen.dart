@@ -1,4 +1,4 @@
-// lib/screens/simplified/simple_report_screen.dart — FIXED: Better Threshold/Low Confidence Error Handling
+// lib/screens/simplified/simple_report_screen.dart - USER ONLY VERSION
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -18,11 +18,8 @@ import '../../utils/complaint_utils.dart';
 import '../../widgets/common/custom_loader.dart';
 
 class SimpleReportScreen extends StatefulWidget {
-  final bool isAdmin;
-  
   const SimpleReportScreen({
     Key? key,
-    this.isAdmin = false,
   }) : super(key: key);
 
   @override
@@ -60,7 +57,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   bool _analysisCompleted = false;
   String? _detectionError;
   bool _isLowConfidence = false;
-  bool _canSubmitWithLowConfidence = false; // NEW: Allow submission even with low confidence
+  bool _canSubmitWithLowConfidence = false;
   
   // ENHANCED: Double Detection results
   Map<String, dynamic>? _combinedAnalysisResult;
@@ -84,9 +81,10 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     // Initialize page controller for multi-step form
     _pageController = PageController(initialPage: 0);
     
-    _reporterNameController.text = widget.isAdmin ? 'Admin User' : 'Test User';
+    // Set default reporter name for users
+    _reporterNameController.text = 'Water Reporter';
     
-    print('📱 SimpleReport initialized with ENHANCED error handling');
+    print('📱 SimpleReport initialized for user mode');
     _getCurrentLocation();
   }
   
@@ -174,7 +172,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(12)),
         child: Column(
           children: [
-            Icon(icon, size: 32, color: widget.isAdmin ? Colors.orange : AppTheme.primaryColor),
+            Icon(icon, size: 32, color: AppTheme.primaryColor),
             SizedBox(height: 8),
             Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
             SizedBox(height: 4),
@@ -210,8 +208,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           setState(() => _isSavingImages = true);
           
           final processedImageFile = await _processImageForAnalysis(imageFile, source);
-          final folder = widget.isAdmin ? 'admin_reports' : 'reports';
-          final localPath = await _storageService.uploadImage(processedImageFile, folder);
+          final localPath = await _storageService.uploadImage(processedImageFile, 'reports');
           
           print('📁 Image saved to local storage: $localPath');
           
@@ -229,7 +226,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           _showMessage('Image processed and saved successfully!', isError: false);
           
           if (_imageFiles.length == 1) {
-            print('🔬 Auto—analyzing first image...');
+            print('🔬 Auto-analyzing first image...');
             await _detectWaterQuality(File(localPath));
           }
           
@@ -277,7 +274,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       _resetAnalysisState();
       setState(() => _isDetecting = true);
       
-      print('🔬 Starting Detection water quality detection...');
+      print('🔬 Starting enhanced water quality detection...');
       
       // Validate image file
       if (!await image.exists()) {
@@ -297,22 +294,22 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         throw Exception('Backend server is not running. Please start the Python server.');
       }
       
-      print('✅ Backend connected, starting  Detection analysis...');
+      print('✅ Backend connected, starting double verification analysis...');
       
-      // Analyze water quality with double Detection (API + Gemini)
+      // Analyze water quality with double verification (API + Gemini)
       final combinedResult = await _apiService.analyzeWaterQualityWithDoubleVerification(image);
       
       final apiResult = combinedResult['api_result'] as WaterAnalysisResult;
       final geminiResult = combinedResult['gemini_result'] as GeminiAnalysisResult?;
       
-      print('📊 Detection results:');
+      print('📊 Double verification results:');
       print('   API Water detected: ${apiResult.waterDetected}');
       print('   API Quality: ${apiResult.waterQuality}');
       print('   API Confidence: ${apiResult.confidence}%');
       if (geminiResult != null) {
-        print('   Water detected: ${geminiResult.waterDetected}');
-        print('    Safety: ${geminiResult.isSafe}');
-        print('    Confidence: ${geminiResult.confidence}%');
+        print('   Gemini Water detected: ${geminiResult.waterDetected}');
+        print('   Gemini Safety: ${geminiResult.isSafe}');
+        print('   Gemini Confidence: ${geminiResult.confidence}%');
       }
       print('   Final Safety: ${combinedResult['final_safety_assessment']}');
       print('   Agreement: ${combinedResult['agreement_level']}');
@@ -334,7 +331,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       _handleAnalysisResult(apiResult, combinedResult);
       
     } catch (e) {
-      print('❌  Detection analysis failed: $e');
+      print('❌ Double verification analysis failed: $e');
       
       setState(() {
         _isDetecting = false;
@@ -347,7 +344,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     }
   }
   
-  // ENHANCED: Handle analysis results with double Detection
+  // ENHANCED: Handle analysis results with double verification
   void _handleAnalysisResult(WaterAnalysisResult apiResult, Map<String, dynamic> combinedResult) {
     final finalSafety = combinedResult['final_safety_assessment'] as String;
     final recommendation = combinedResult['recommendation'] as String;
@@ -364,7 +361,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     } else if (apiResult.isLowConfidence) {
       // LOW CONFIDENCE BUT DETECTED
       _showMessage(
-        'Low confidence analysis completed. Detection provides additional assessment.',
+        'Low confidence analysis completed. Double verification provides additional assessment.',
         isError: false,
         duration: 6,
       );
@@ -373,19 +370,19 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       // SUCCESSFUL ANALYSIS
       if (finalSafety == 'Likely Safe') {
         _showMessage(
-          ' Detection completed! Both analyses indicate safe water quality.',
+          'Double verification completed! Both analyses indicate safe water quality.',
           isError: false,
           duration: 6,
         );
       } else if (finalSafety == 'Likely Unsafe') {
         _showMessage(
-          'Detection completed! Both analyses indicate potential water quality issues.',
+          'Double verification completed! Both analyses indicate potential water quality issues.',
           isError: false,
           duration: 6,
         );
       } else {
         _showMessage(
-          'Detection completed with mixed results. Manual Detection recommended.',
+          'Double verification completed with mixed results. Manual verification recommended.',
           isError: false,
           duration: 6,
         );
@@ -489,7 +486,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
       final now = DateTime.now();
       final report = ReportModel(
         id: '',
-        userId: widget.isAdmin ? 'admin—test' : 'user—test',
+        userId: 'user_${now.millisecondsSinceEpoch}',
         userName: _reporterNameController.text.trim(),
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
@@ -535,7 +532,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     
     if (_detectionError != null) {
       title = 'Submit Without Analysis?';
-      message = 'your report and input matter — the authorities will review your submission.';
+      message = 'Your report and input matter — the authorities will review your submission.';
     } else if (!_waterDetected && _imageFiles.isNotEmpty) {
       title = 'No Water Detected';
       message = 'AI did not detect water in your images. Do you still want to submit this report?';
@@ -567,7 +564,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
+                backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
               ),
               child: Text('Submit Anyway'),
@@ -588,7 +585,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         final finalSafety = _combinedAnalysisResult!['final_safety_assessment'] as String;
         final agreementLevel = _combinedAnalysisResult!['agreement_level'] as String;
         
-        baseMessage += '\nDetection completed with ${_confidence!.toStringAsFixed(1)}% combined confidence.';
+        baseMessage += '\nDouble verification completed with ${_confidence!.toStringAsFixed(1)}% combined confidence.';
         baseMessage += '\nFinal assessment: $finalSafety';
         baseMessage += '\nAgreement level: $agreementLevel';
       } else if (_isLowConfidence) {
@@ -630,14 +627,13 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   
   @override
   Widget build(BuildContext context) {
-    final themeColor = widget.isAdmin ? Colors.orange : AppTheme.primaryColor;
-    
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: Text(widget.isAdmin ? 'Create Admin Report' : 'Report Water Issue'),
-        backgroundColor: themeColor,
+        title: Text('Report Water Issue'),
+        backgroundColor: AppTheme.primaryColor,
         elevation: 0,
+        foregroundColor: Colors.white,
         actions: [
           if (_imageFiles.isNotEmpty)
             Padding(
@@ -671,10 +667,8 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (widget.isAdmin) _buildAdminIndicator(),
-                  
                   // Step indicator
-                  _buildStepIndicator(themeColor),
+                  _buildStepIndicator(),
                   
                   // Page view for multi-step form
                   Expanded(
@@ -688,16 +682,16 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                       },
                       children: [
                         // Page 1: Photo Upload
-                        _buildPhotoUploadPage(themeColor),
+                        _buildPhotoUploadPage(),
                         
                         // Page 2: Form Details
-                        _buildFormDetailsPage(themeColor),
+                        _buildFormDetailsPage(),
                       ],
                     ),
                   ),
                   
                   // Navigation buttons
-                  _buildNavigationButtons(themeColor),
+                  _buildNavigationButtons(),
                 ],
               ),
             ),
@@ -706,21 +700,21 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   }
   
   // Step indicator to show current progress
-  Widget _buildStepIndicator(Color themeColor) {
+  Widget _buildStepIndicator() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
       child: Row(
         children: [
-          _buildStepCircle(0, 'Photos', themeColor),
-          _buildStepConnector(_currentPage > 0, themeColor),
-          _buildStepCircle(1, 'Details', themeColor),
+          _buildStepCircle(0, 'Photos'),
+          _buildStepConnector(_currentPage > 0),
+          _buildStepCircle(1, 'Details'),
         ],
       ),
     );
   }
   
   // Individual step circle for the step indicator
-  Widget _buildStepCircle(int step, String label, Color themeColor) {
+  Widget _buildStepCircle(int step, String label) {
     final isActive = _currentPage >= step;
     final isCurrent = _currentPage == step;
     
@@ -731,12 +725,12 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: isActive ? themeColor : Colors.grey.shade300,
+              color: isActive ? AppTheme.primaryColor : Colors.grey.shade300,
               shape: BoxShape.circle,
-              border: isCurrent ? Border.all(color: themeColor, width: 3) : null,
+              border: isCurrent ? Border.all(color: AppTheme.primaryColor, width: 3) : null,
               boxShadow: isCurrent ? [
                 BoxShadow(
-                  color: themeColor.withOpacity(0.3),
+                  color: AppTheme.primaryColor.withOpacity(0.3),
                   blurRadius: 8,
                   spreadRadius: 2,
                 )
@@ -757,7 +751,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           Text(
             label,
             style: TextStyle(
-              color: isActive ? themeColor : Colors.grey.shade600,
+              color: isActive ? AppTheme.primaryColor : Colors.grey.shade600,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -767,16 +761,16 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   }
   
   // Connector line between step circles
-  Widget _buildStepConnector(bool isActive, Color themeColor) {
+  Widget _buildStepConnector(bool isActive) {
     return Container(
       width: 60,
       height: 4,
-      color: isActive ? themeColor : Colors.grey.shade300,
+      color: isActive ? AppTheme.primaryColor : Colors.grey.shade300,
     );
   }
   
   // Page 1: Photo Upload
-  Widget _buildPhotoUploadPage(Color themeColor) {
+  Widget _buildPhotoUploadPage() {
     return ListView(
       children: [
         // Header Card
@@ -789,7 +783,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [themeColor.withOpacity(0.1), themeColor.withOpacity(0.05)],
+                colors: [AppTheme.primaryColor.withOpacity(0.1), AppTheme.primaryColor.withOpacity(0.05)],
               ),
             ),
             child: Padding(
@@ -800,7 +794,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(12)),
                         child: Icon(Icons.photo_camera, color: Colors.white, size: 24),
                       ),
                       const SizedBox(width: 16),
@@ -831,15 +825,15 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
         const SizedBox(height: 16),
         
         // Photos Grid
-        if (_imageFiles.isNotEmpty) _buildPhotosGrid(themeColor),
+        if (_imageFiles.isNotEmpty) _buildPhotosGrid(),
         
         // Analysis Results
-        if (_isDetecting) _buildAnalyzingCard(themeColor)
-        else if (_analysisCompleted) _buildAnalysisResultCard(themeColor)
-        else if (_imageFiles.isNotEmpty) _buildAnalysisPrompt(themeColor),
+        if (_isDetecting) _buildAnalyzingCard()
+        else if (_analysisCompleted) _buildAnalysisResultCard()
+        else if (_imageFiles.isNotEmpty) _buildAnalysisPrompt(),
         
         // Camera Button
-        _buildCameraButton(themeColor),
+        _buildCameraButton(),
         
         const SizedBox(height: 16),
         
@@ -872,7 +866,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  Widget _buildPhotosGrid(Color themeColor) {
+  Widget _buildPhotosGrid() {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -912,7 +906,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 mainAxisSpacing: 12,
               ),
               itemCount: _imageFiles.length,
-              itemBuilder: (context, index) => _buildImageTile(index, themeColor),
+              itemBuilder: (context, index) => _buildImageTile(index),
             ),
           ],
         ),
@@ -920,7 +914,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  Widget _buildImageTile(int index, Color themeColor) {
+  Widget _buildImageTile(int index) {
     final isMainPhoto = index == 0;
     final file = _imageFiles[index];
     
@@ -930,7 +924,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: isMainPhoto 
-                ? Border.all(color: themeColor, width: 3)
+                ? Border.all(color: AppTheme.primaryColor, width: 3)
                 : Border.all(color: Colors.grey.shade300, width: 1),
           ),
           child: ClipRRect(
@@ -961,7 +955,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             left: 4,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(6)),
               child: Text('MAIN', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
             ),
           ),
@@ -1001,7 +995,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  Widget _buildCameraButton(Color themeColor) {
+  Widget _buildCameraButton() {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1015,7 +1009,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               color: _isSavingImages 
                   ? Colors.orange 
                   : _imageFiles.length < _maxImages 
-                      ? themeColor 
+                      ? AppTheme.primaryColor 
                       : Colors.grey.shade400,
             ),
             const SizedBox(height: 12),
@@ -1064,7 +1058,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _imageFiles.length < _maxImages && !_isSavingImages ? themeColor : Colors.grey.shade400,
+                  backgroundColor: _imageFiles.length < _maxImages && !_isSavingImages ? AppTheme.primaryColor : Colors.grey.shade400,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1078,7 +1072,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  Widget _buildAnalyzingCard(Color themeColor) {
+  Widget _buildAnalyzingCard() {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1108,7 +1102,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Detection Analysis', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+              Text('Double Verification Analysis', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
               const SizedBox(height: 8),
               Text(
                 'AI models are analyzing your image for enhanced accuracy and safety assessment.',
@@ -1128,7 +1122,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(color: Colors.purple.shade100, borderRadius: BorderRadius.circular(8)),
-                    child: Text('AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade700)),
+                    child: Text('Gemini AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade700)),
                   ),
                 ],
               ),
@@ -1141,7 +1135,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   children: [
                     Container(width: 8, height: 8, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
                     const SizedBox(width: 8),
-                    Text('Detection in Progress...', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
+                    Text('Double Verification in Progress...', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -1152,7 +1146,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  Widget _buildAnalysisPrompt(Color themeColor) {
+  Widget _buildAnalysisPrompt() {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1162,7 +1156,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [themeColor.withOpacity(0.1), themeColor.withOpacity(0.05)],
+            colors: [AppTheme.primaryColor.withOpacity(0.1), AppTheme.primaryColor.withOpacity(0.05)],
           ),
         ),
         child: Padding(
@@ -1171,11 +1165,11 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: themeColor.withOpacity(0.1), shape: BoxShape.circle),
-                child: Icon(Icons.psychology, size: 40, color: themeColor),
+                decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+                child: Icon(Icons.psychology, size: 40, color: AppTheme.primaryColor),
               ),
               const SizedBox(height: 16),
-              Text('Ready for Detection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
+              Text('Ready for Double Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
               const SizedBox(height: 8),
               Text(
                 'Your photos are ready for enhanced analysis using AI models for better accuracy and safety assessment.',
@@ -1188,9 +1182,9 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => _detectWaterQuality(_imageFiles.first),
                   icon: Icon(Icons.verified, size: 24),
-                  label: Text('Start Detection', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  label: Text('Start Double Verification', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: themeColor,
+                    backgroundColor: AppTheme.primaryColor,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1205,8 +1199,8 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     );
   }
 
-  // ENHANCED: Comprehensive analysis result display with double Detection
-  Widget _buildAnalysisResultCard(Color themeColor) {
+  // ENHANCED: Comprehensive analysis result display with double verification
+  Widget _buildAnalysisResultCard() {
     if (!_analysisCompleted) return Container();
     
     Color resultColor = _waterDetected 
@@ -1230,13 +1224,13 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with double Detection indicator
+              // Header with double verification indicator
               Row(
                 children: [
                   Icon(Icons.verified, color: Colors.blue, size: 24),
                   SizedBox(width: 8),
                   Text(
-                    'Detection Analysis',
+                    'Double Verification Analysis',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
                   ),
                   Spacer(),
@@ -1248,7 +1242,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        'AI Models',
+                        'Two AI Models',
                         style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
                     ),
@@ -1262,9 +1256,9 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               
               const SizedBox(height: 16),
               
-              // ENHANCED: Double Detection details
+              // ENHANCED: Double verification details
               if (_combinedAnalysisResult != null)
-                _buildDoubleDetectionDetails(),
+                _buildDoubleVerificationDetails(),
               
               const SizedBox(height: 16),
               
@@ -1282,7 +1276,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Your Report and Input Matter —The Authorities Will Review Your Submission',
+                        'Your Report and Input Matter — The Authorities Will Review Your Submission',
                         style: TextStyle(fontSize: 12, color: Colors.green.shade800, fontWeight: FontWeight.w500),
                       ),
                     ),
@@ -1370,7 +1364,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Classification Result",
+                      Text("Water Quality Result",
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: resultColor),
                       ),
                       const SizedBox(height: 4),
@@ -1430,42 +1424,6 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   }
 
   // Helper methods for status display
-  Color _getStatusColor() {
-    if (_isDetecting) return Colors.blue;
-    if (_detectionError != null) return Colors.red;
-    if (_analysisCompleted && !_waterDetected) return Colors.orange;
-    if (_analysisCompleted && _isLowConfidence) return Colors.amber;
-    if (_analysisCompleted && _waterDetected) return Colors.green;
-    return Colors.grey;
-  }
-  
-  IconData _getStatusIcon() {
-    if (_isDetecting) return Icons.search;
-    if (_detectionError != null) return Icons.error;
-    if (_analysisCompleted && !_waterDetected) return Icons.warning;
-    if (_analysisCompleted && _isLowConfidence) return Icons.info;
-    if (_analysisCompleted && _waterDetected) return Icons.check_circle;
-    return Icons.psychology;
-  }
-  
-  String _getStatusTitle() {
-    if (_isDetecting) return 'Analyzing Image...';
-    if (_detectionError != null) return 'Analysis Error (Can Still Submit)';
-    if (_analysisCompleted && !_waterDetected) return 'No Water Detected (Can Still Submit)';
-    if (_analysisCompleted && _isLowConfidence) return 'Low Confidence Result (Can Submit)';
-    if (_analysisCompleted && _waterDetected) return 'Water Quality Analyzed';
-    return 'Enhanced AI Ready';
-  }
-  
-  String _getStatusSubtitle() {
-    if (_isDetecting) return 'Smart AI is checking for water presence and quality';
-    if (_detectionError != null) return 'Error occurred but manual submission is available';
-    if (_analysisCompleted && !_waterDetected) return 'Submit with manual observations';
-    if (_analysisCompleted && _isLowConfidence) return 'Low confidence but result available';
-    if (_analysisCompleted && _waterDetected) return 'Quality analysis completed successfully';
-    return 'Automatic water detection ';
-  }
-
   Color _getAnalysisStatusColor() {
     if (_detectionError != null) return Colors.red;
     if (!_waterDetected && _analysisCompleted) return Colors.orange;
@@ -1489,27 +1447,6 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     return 'OK';
   }
 
-  IconData _getResultIcon() {
-    if (_detectionError != null) return Icons.error;
-    if (!_waterDetected) return Icons.warning_amber;
-    if (_isLowConfidence) return Icons.info;
-    return Icons.check_circle;
-  }
-  
-  String _getResultTitle() {
-    if (_detectionError != null) return 'Analysis Error';
-    if (!_waterDetected) return 'No Water Detected';
-    if (_isLowConfidence) return 'Low Confidence Result';
-    return 'Water Quality Analyzed';
-  }
-  
-  String _getResultSubtitle() {
-    if (_detectionError != null) return 'Error occurred but you can still submit';
-    if (!_waterDetected) return 'No water found but you can still submit';
-    if (_isLowConfidence) return 'Low confidence but result is available';
-    return 'Analysis completed successfully';
-  }
-
   Color _getConfidenceColor(double confidence) {
     if (confidence >= 90) return Colors.green.shade600;
     if (confidence >= 80) return Colors.lightGreen.shade600;
@@ -1518,8 +1455,8 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     return Colors.red.shade600;
   }
   
-  // ENHANCED: Build double Detection details
-  Widget _buildDoubleDetectionDetails() {
+  // ENHANCED: Build double verification details
+  Widget _buildDoubleVerificationDetails() {
     if (_combinedAnalysisResult == null) return Container();
     
     final apiResult = _combinedAnalysisResult!['api_result'] as WaterAnalysisResult;
@@ -1543,7 +1480,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               Icon(Icons.compare_arrows, color: Colors.blue, size: 20),
               SizedBox(width: 8),
               Text(
-                'Double Detection Results',
+                'Double Verification Results',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
               ),
             ],
@@ -1564,7 +1501,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           // Gemini Results
           if (geminiResult != null)
             _buildAnalysisComparisonRow(
-              'Analysis',
+              'Gemini Analysis',
               geminiResult.waterDetected ? 'Water Detected' : 'No Water',
               geminiResult.confidence,
               geminiResult.isSafe ? 'Safe' : 'Unsafe',
@@ -1682,55 +1619,6 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     }
   }
 
-  Widget _buildAdminIndicator() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.orange.shade50, Colors.orange.shade100.withOpacity(0.3)],
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [Colors.orange, Colors.orange.shade600]),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 24),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Admin Mode ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Advanced water detection — all scenarios supported',
-                        style: TextStyle(color: Colors.orange.shade800, fontSize: 14, height: 1.3),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDetailsSection() {
     return Card(
       elevation: 2,
@@ -1742,7 +1630,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.description, color: widget.isAdmin ? Colors.orange : AppTheme.primaryColor),
+                Icon(Icons.description, color: AppTheme.primaryColor),
                 const SizedBox(width: 12),
                 Text('Report Details', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ],
@@ -1871,7 +1759,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                 filled: true,
                 fillColor: Colors.grey.shade50,
               ),
-              maxLines: widget.isAdmin ? 4 : 3,
+              maxLines: 3,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'Please enter a description';
@@ -1910,7 +1798,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   }
   
   // Page 2: Form Details
-  Widget _buildFormDetailsPage(Color themeColor) {
+  Widget _buildFormDetailsPage() {
     return ListView(
       children: [
         Card(
@@ -1922,7 +1810,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [themeColor.withOpacity(0.1), themeColor.withOpacity(0.05)],
+                colors: [AppTheme.primaryColor.withOpacity(0.1), AppTheme.primaryColor.withOpacity(0.05)],
               ),
             ),
             child: Padding(
@@ -1934,7 +1822,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: themeColor, borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(12)),
                         child: Icon(Icons.edit_note, color: Colors.white, size: 24),
                       ),
                       const SizedBox(width: 16),
@@ -1973,7 +1861,7 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
   }
   
   // Navigation buttons for moving between steps
-  Widget _buildNavigationButtons(Color themeColor) {
+  Widget _buildNavigationButtons() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
       child: Row(
@@ -2010,33 +1898,31 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
                   icon: Text(_imageFiles.isEmpty ? 'Skip' : 'Next'),
                   label: Icon(_imageFiles.isEmpty ? Icons.skip_next : Icons.arrow_forward),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: themeColor,
+                    backgroundColor: AppTheme.primaryColor,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
                 )
-              : _buildSubmitButton(themeColor),
+              : _buildSubmitButton(),
         ],
       ),
     );
   }
   
-  Widget _buildSubmitButton(Color themeColor) {
+  Widget _buildSubmitButton() {
     return ElevatedButton.icon(
       onPressed: (_isLoading || _isSavingImages) ? null : _submitReport,
-      icon: Icon(widget.isAdmin ? Icons.admin_panel_settings : Icons.send, size: 24),
+      icon: Icon(Icons.send, size: 24),
       label: Text(
         _isLoading || _isSavingImages
             ? (_isSavingImages 
                 ? 'Preparing...'
-                : widget.isAdmin
-                    ? 'Creating...'
-                    : 'Submitting...')
-            : (widget.isAdmin ? 'Report Water Issue' : 'Report Water Issue'),
+                : 'Submitting...')
+            : 'Submit Report',
         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
       ),
       style: ElevatedButton.styleFrom(
-        backgroundColor: themeColor,
+        backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2051,7 +1937,6 @@ class _SimpleReportScreenState extends State<SimpleReportScreen> {
     _addressController.dispose();
     _reporterNameController.dispose();
     _pageController.dispose();
-    // Clean up any other resources if needed
     super.dispose();
   }
 }

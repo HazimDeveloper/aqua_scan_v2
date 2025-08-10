@@ -17,7 +17,7 @@ class GoogleMapsRouteWidget extends StatefulWidget {
   final int? selectedRouteIndex;
 
   const GoogleMapsRouteWidget({
-    Key? key,
+    super.key,
     this.polylineRoutes,
     required this.reports,
     this.currentLocation,
@@ -25,7 +25,7 @@ class GoogleMapsRouteWidget extends StatefulWidget {
     this.onRouteSelected,
     this.showMultipleRoutes = true,
     this.selectedRouteIndex,
-  }) : super(key: key);
+  });
 
   @override
   _GoogleMapsRouteWidgetState createState() => _GoogleMapsRouteWidgetState();
@@ -109,7 +109,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   // NEW: Timer functions for auto-hiding controls
   void _startHideControlsTimer() {
     _hideControlsTimer?.cancel();
-    _hideControlsTimer = Timer(Duration(seconds: 3), () {
+    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
         setState(() {
           _showZoomControls = false;
@@ -730,7 +730,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
               _mapController = controller;
               print('🗺️ Google Map created successfully');
               
-              Future.delayed(Duration(milliseconds: 500), () {
+              Future.delayed(const Duration(milliseconds: 500), () {
                 _fitAllRoutes();
               });
             },
@@ -772,7 +772,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
           
           // NEW: Custom Zoom Controls Panel (Right side)
           AnimatedPositioned(
-            duration: Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 300),
             right: _showZoomControls ? 16 : -80,
             top: MediaQuery.of(context).padding.top + 80,
             child: _buildZoomControlsPanel(),
@@ -780,7 +780,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
           
           // NEW: Map Control Buttons (Bottom right)
           AnimatedPositioned(
-            duration: Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 300),
             right: _showZoomControls ? 16 : -100,
             bottom: 100,
             child: _buildMapControlButtons(),
@@ -788,7 +788,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
           
           // NEW: Zoom Level Indicator (Top right)
           AnimatedPositioned(
-            duration: Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 300),
             right: _showZoomControls ? 16 : -120,
             top: MediaQuery.of(context).padding.top + 20,
             child: _buildZoomLevelIndicator(),
@@ -800,12 +800,12 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
               top: MediaQuery.of(context).padding.top + 20,
               left: 20,
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(
@@ -844,7 +844,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
           BoxShadow(
             color: Colors.black.withOpacity(0.2),
             blurRadius: 8,
-            offset: Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -856,8 +856,8 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
             color: Colors.transparent,
             child: InkWell(
               onTap: _currentZoom < 20.0 ? _zoomIn : null,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-              child: Container(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: SizedBox(
                 width: 48,
                 height: 48,
                 child: Icon(
@@ -880,8 +880,8 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
             color: Colors.transparent,
             child: InkWell(
               onTap: _currentZoom > 2.0 ? _zoomOut : null,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-              child: Container(
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+              child: SizedBox(
                 width: 48,
                 height: 48,
                 child: Icon(
@@ -910,7 +910,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
           color: Colors.green,
         ),
         
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         
         // My Location Button
         if (widget.currentLocation != null)
@@ -943,7 +943,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
             BoxShadow(
               color: Colors.black.withOpacity(0.2),
               blurRadius: 8,
-              offset: Offset(0, 2),
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -966,7 +966,7 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
   // NEW: Build zoom level indicator
   Widget _buildZoomLevelIndicator() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
         borderRadius: BorderRadius.circular(16),
@@ -975,15 +975,15 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.zoom_in,
             color: Colors.white,
             size: 14,
           ),
-          SizedBox(width: 6),
+          const SizedBox(width: 6),
           Text(
             '${_currentZoom.toStringAsFixed(1)}x',
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -1000,13 +1000,13 @@ class _GoogleMapsRouteWidgetState extends State<GoogleMapsRouteWidget>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.location_off, size: 64, color: Colors.grey.shade400),
-          SizedBox(height: 16),
-          Text(
+          const SizedBox(height: 16),
+          const Text(
             "No data available",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 8),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             "No location data, routes, or reports found",
             style: TextStyle(color: Colors.grey),
             textAlign: TextAlign.center,

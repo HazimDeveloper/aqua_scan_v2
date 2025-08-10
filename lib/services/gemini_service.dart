@@ -44,14 +44,14 @@ class GeminiService {
         throw Exception('Image file is empty');
       }
       
-      print('📏 Image size: ${fileSize} bytes');
+      print('📏 Image size: $fileSize bytes');
       
       // Convert image to base64
       final imageBytes = await imageFile.readAsBytes();
       final base64Image = base64Encode(imageBytes);
       
       // Create the prompt for water quality analysis
-      final prompt = '''
+      const prompt = '''
 Analyze this water image for quality and safety assessment. Please provide:
 
 1. Water Detection: Is water clearly visible in the image?
